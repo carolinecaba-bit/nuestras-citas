@@ -1,10 +1,14 @@
 require('dotenv').config();
 
 const express = require('express');
+const session = require('express-session');
 const path = require('path');
+const crypto = require('crypto');
 const db = require('./db');
 const { TIPOS_CITA, obtenerTipoPorId, analizarTexto } = require('./analizador');
 const { buscarLugares, ErrorServicioLugares } = require('./lugares');
+const usuarios = require('./usuarios');
+const auth = require('./auth');
 
 const app = express();
 
@@ -18,8 +22,32 @@ const CAMPOS_DIARIOS = 'weather_code,temperature_2m_max,temperature_2m_min,preci
 
 const TIMEOUT_MS = 8000;
 
+// Si no se configuro un SESSION_SECRET propio, generamos uno aleatorio al
+// arrancar. La app sigue funcionando, pero todas las sesiones se cierran
+// cada vez que el servidor se reinicia (avisamos por consola).
+let SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  SESSION_SECRET = crypto.randomBytes(32).toString('hex');
+  console.warn('[sesion] No se configuro SESSION_SECRET: se genero uno temporal. Las sesiones se perderan al reiniciar el servidor.');
+}
+
+// Necesario para que las cookies "secure" funcionen detras del proxy de
+// Render (que termina el HTTPS y reenvia por HTTP internamente).
+app.set('trust proxy', 1);
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 24 * 30 // 30 dias
+  }
+}));
 
 // ---------------------------------------------------------------------------
 // Utilidades compartidas (clima)
@@ -298,11 +326,11 @@ function validarCita(body) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/citas  — listar citas (ordenadas por fecha/hora)
+// GET /api/citas  — listar MIS citas (ordenadas por fecha/hora)
 // ---------------------------------------------------------------------------
-app.get('/api/citas', async (_req, res) => {
+app.get('/api/citas', auth.requiereSesion, async (req, res) => {
   try {
-    const citas = await db.obtenerCitas();
+    const citas = await db.obtenerCitas(req.session.usuarioId);
     res.json({ citas });
   } catch (err) {
     manejarError(err, res, 'lectura de citas');
@@ -310,9 +338,9 @@ app.get('/api/citas', async (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/citas  — crear una cita
+// POST /api/citas  — crear una cita para el usuario de la sesion actual
 // ---------------------------------------------------------------------------
-app.post('/api/citas', async (req, res) => {
+app.post('/api/citas', auth.requiereSesion, async (req, res) => {
   const errores = validarCita(req.body);
   if (errores.length > 0) {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
@@ -322,6 +350,7 @@ app.post('/api/citas', async (req, res) => {
 
   try {
     const nuevaCita = await db.crearCita({
+      usuarioId: req.session.usuarioId,
       titulo: titulo.trim(),
       tipo,
       conQuien: conQuien ? conQuien.trim() : null,
@@ -348,11 +377,11 @@ app.post('/api/citas', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /api/citas/:id
+// DELETE /api/citas/:id  — solo si la cita es del usuario de la sesion
 // ---------------------------------------------------------------------------
-app.delete('/api/citas/:id', async (req, res) => {
+app.delete('/api/citas/:id', auth.requiereSesion, async (req, res) => {
   try {
-    const eliminada = await db.eliminarCita(req.params.id);
+    const eliminada = await db.eliminarCita(req.params.id, req.session.usuarioId);
     if (!eliminada) {
       return res.status(404).json({ error: 'no_encontrada', mensaje: 'No existe una cita con ese id.' });
     }
@@ -365,9 +394,9 @@ app.delete('/api/citas/:id', async (req, res) => {
 // ---------------------------------------------------------------------------
 // GET /api/citas/:id/clima
 // ---------------------------------------------------------------------------
-app.get('/api/citas/:id/clima', async (req, res) => {
+app.get('/api/citas/:id/clima', auth.requiereSesion, async (req, res) => {
   try {
-    const cita = await db.obtenerCitaPorId(req.params.id);
+    const cita = await db.obtenerCitaPorId(req.params.id, req.session.usuarioId);
     if (!cita) {
       return res.status(404).json({ error: 'no_encontrada', mensaje: 'No existe una cita con ese id.' });
     }
@@ -384,6 +413,30 @@ app.get('/api/citas/:id/clima', async (req, res) => {
     }
     manejarError(err, res, 'clima de la cita');
   }
+});
+
+// ---------------------------------------------------------------------------
+// Autenticacion con Google
+// ---------------------------------------------------------------------------
+app.get('/auth/google', auth.iniciarLogin);
+app.get('/auth/google/callback', auth.manejarCallback);
+app.post('/auth/logout', auth.cerrarSesion);
+
+app.get('/api/usuario-actual', async (req, res) => {
+  if (!req.session.usuarioId) {
+    return res.json({ usuario: null, loginConfigurado: auth.credencialesConfiguradas() });
+  }
+  const usuario = await usuarios.obtenerUsuarioPorId(req.session.usuarioId);
+  if (!usuario) {
+    // La sesion apunta a un usuario que ya no existe (raro, pero posible
+    // si se borro data/usuarios.json a mano). La limpiamos.
+    req.session.usuarioId = null;
+    return res.json({ usuario: null, loginConfigurado: auth.credencialesConfiguradas() });
+  }
+  res.json({
+    usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, avatarUrl: usuario.avatarUrl },
+    loginConfigurado: true
+  });
 });
 
 app.get('/api/health', (_req, res) => res.json({ estado: 'ok' }));

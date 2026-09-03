@@ -42,7 +42,58 @@ h1, h2, h3 {
 
 /* ---------- Hero ---------- */
 
-.hero { margin-bottom: 28px; }
+.hero { margin-bottom: 28px; position: relative; }
+
+/* ---------- Cuenta / login ---------- */
+
+.cuenta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.cuenta .avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.cuenta .btn-cerrar-sesion {
+  background: none;
+  border: 1px solid var(--borde);
+  color: var(--texto-suave);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+.cuenta .btn-cerrar-sesion:hover { color: var(--acento); border-color: var(--acento); }
+
+.puerta-login { text-align: center; }
+.puerta-texto { color: var(--texto-suave); margin: 6px 0 18px; }
+
+.btn-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-decoration: none;
+  width: auto;
+  padding: 12px 22px;
+}
+
+.icono-google {
+  display: inline-flex;
+  background: white;
+  border-radius: 50%;
+  padding: 3px;
+  line-height: 0;
+}
+
 
 .hero-linea {
   font-family: 'Fraunces', serif;

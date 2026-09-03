@@ -53,18 +53,24 @@ async function guardarCitas(citas) {
   });
 }
 
-async function obtenerCitas() {
+async function obtenerCitas(usuarioId) {
   const citas = await leerCitas();
-  return citas.slice().sort((a, b) => {
-    const claveA = `${a.fecha}T${a.hora || '00:00'}`;
-    const claveB = `${b.fecha}T${b.hora || '00:00'}`;
-    return claveA.localeCompare(claveB);
-  });
+  return citas
+    .filter((c) => c.usuarioId === usuarioId)
+    .sort((a, b) => {
+      const claveA = `${a.fecha}T${a.hora || '00:00'}`;
+      const claveB = `${b.fecha}T${b.hora || '00:00'}`;
+      return claveA.localeCompare(claveB);
+    });
 }
 
-async function obtenerCitaPorId(id) {
+async function obtenerCitaPorId(id, usuarioId) {
   const citas = await leerCitas();
-  return citas.find((c) => c.id === id) || null;
+  const cita = citas.find((c) => c.id === id) || null;
+  // Si la cita existe pero pertenece a otro usuario, la tratamos como
+  // inexistente: no revelamos que existe una cita ajena.
+  if (cita && cita.usuarioId !== usuarioId) return null;
+  return cita;
 }
 
 async function crearCita(datosCita) {
@@ -79,9 +85,9 @@ async function crearCita(datosCita) {
   return nuevaCita;
 }
 
-async function eliminarCita(id) {
+async function eliminarCita(id, usuarioId) {
   const citas = await leerCitas();
-  const indice = citas.findIndex((c) => c.id === id);
+  const indice = citas.findIndex((c) => c.id === id && c.usuarioId === usuarioId);
   if (indice === -1) return false;
   citas.splice(indice, 1);
   await guardarCitas(citas);

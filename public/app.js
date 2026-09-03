@@ -78,6 +78,11 @@ let lugarElegido = null; // { nombre, lat, lon, enlaceMapa }
 // -----------------------------------------------------------------------
 // Referencias del DOM
 // -----------------------------------------------------------------------
+const elCuenta = document.getElementById('cuenta');
+const elPuertaLogin = document.getElementById('puerta-login');
+const elPuertaMensaje = document.getElementById('puerta-mensaje');
+const elContenidoApp = document.getElementById('contenido-app');
+
 const inputTextoIdea = document.getElementById('texto-idea');
 const btnAnalizar = document.getElementById('btn-analizar');
 const mensajeAnalisis = document.getElementById('mensaje-analisis');
@@ -146,6 +151,10 @@ async function llamarApi(url, opciones) {
     datos = await respuesta.json();
   } catch (err) {
     throw new Error('El servidor devolvió una respuesta inesperada.');
+  }
+  if (respuesta.status === 401) {
+    mostrarPuertaLogin('Tu sesión terminó. Inicia sesión de nuevo para continuar.');
+    throw new Error(datos.mensaje || 'Debes iniciar sesión para continuar.');
   }
   if (!respuesta.ok) {
     throw new Error(datos.mensaje || 'Ocurrió un error al consultar el servicio.');
@@ -487,7 +496,61 @@ async function eliminarCita(id) {
 }
 
 // -----------------------------------------------------------------------
+// Sesion (login / logout con Google)
+// -----------------------------------------------------------------------
+function mostrarPuertaLogin(mensaje) {
+  elContenidoApp.classList.add('oculto');
+  elPuertaLogin.classList.remove('oculto');
+  if (mensaje) {
+    mostrarMensaje(elPuertaMensaje, mensaje, 'info');
+  } else {
+    ocultarMensaje(elPuertaMensaje);
+  }
+}
+
+function mostrarApp(usuario) {
+  elPuertaLogin.classList.add('oculto');
+  elContenidoApp.classList.remove('oculto');
+
+  elCuenta.innerHTML = `
+    ${usuario.avatarUrl ? `<img class="avatar" src="${usuario.avatarUrl}" alt="" referrerpolicy="no-referrer">` : ''}
+    <span>${escaparHtml(usuario.nombre)}</span>
+    <button type="button" class="btn-cerrar-sesion" id="btn-cerrar-sesion">Cerrar sesión</button>
+  `;
+  document.getElementById('btn-cerrar-sesion').addEventListener('click', cerrarSesion);
+}
+
+async function cerrarSesion() {
+  try {
+    await fetch('/auth/logout', { method: 'POST' });
+  } catch (err) {
+    // Aunque falle la llamada, igual mostramos la puerta de login:
+    // en el peor caso, la sesion sigue activa hasta que expire sola.
+  }
+  elCuenta.innerHTML = '';
+  mostrarPuertaLogin();
+}
+
+async function iniciar() {
+  try {
+    const data = await fetch('/api/usuario-actual').then((r) => r.json());
+    if (data.usuario) {
+      mostrarApp(data.usuario);
+      cargarTiposCita();
+      cargarCitas();
+    } else if (!data.loginConfigurado) {
+      mostrarPuertaLogin('El inicio de sesión con Google todavía no está configurado en este servidor.');
+      document.getElementById('btn-login-puerta').style.pointerEvents = 'none';
+      document.getElementById('btn-login-puerta').style.opacity = '0.5';
+    } else {
+      mostrarPuertaLogin();
+    }
+  } catch (err) {
+    mostrarPuertaLogin('No se pudo verificar tu sesión. Recarga la página.');
+  }
+}
+
+// -----------------------------------------------------------------------
 // Inicio
 // -----------------------------------------------------------------------
-cargarTiposCita();
-cargarCitas();
+iniciar();
