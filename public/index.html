@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nuestras citas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="contenedor">
+
+    <header class="hero">
+      <p class="hero-linea">Un espacio para planear momentos</p>
+      <h1>Nuestras citas</h1>
+      <p class="hero-sub">Escribe la idea, revisa el clima y descubre dónde hacerla — todo en un solo lugar.</p>
+    </header>
+
+    <section class="postal">
+      <h2>Cuéntame tu idea</h2>
+      <p class="postal-ejemplo">Por ejemplo: «picnic con mi novia el jueves a las 3:00 pm»</p>
+      <textarea id="texto-idea" rows="2" placeholder="Escribe tu idea de cita..."></textarea>
+      <button type="button" id="btn-analizar" class="btn-secundario">Analizar idea</button>
+      <p id="mensaje-analisis" class="mensaje oculto" role="status"></p>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Detalles del plan</h2>
+      <form id="form-cita" class="formulario" autocomplete="off">
+        <label for="cita-titulo">Título</label>
+        <input type="text" id="cita-titulo" placeholder="Ej: Picnic con mi novia" />
+
+        <div class="fila-doble">
+          <div>
+            <label for="cita-tipo">Tipo de plan</label>
+            <select id="cita-tipo"></select>
+          </div>
+          <div>
+            <label for="cita-con-quien">Con quién (opcional)</label>
+            <input type="text" id="cita-con-quien" placeholder="Ej: mi novia" />
+          </div>
+        </div>
+
+        <div class="fila-doble">
+          <div>
+            <label for="cita-fecha">Fecha</label>
+            <input type="date" id="cita-fecha" />
+          </div>
+          <div>
+            <label for="cita-hora">Hora (opcional)</label>
+            <input type="time" id="cita-hora" />
+          </div>
+        </div>
+
+        <label>Ubicación general</label>
+        <div class="tabs-ubicacion" role="tablist">
+          <button type="button" class="tab-ubicacion activo" data-modo="buscar">Buscar lugar</button>
+          <button type="button" class="tab-ubicacion" data-modo="coordenadas">Coordenadas</button>
+        </div>
+
+        <div id="modo-buscar" class="modo-ubicacion activo">
+          <div class="fila">
+            <input type="text" id="buscar-lugar" placeholder="Ej: Santo Domingo, Madrid..." />
+            <button type="button" id="btn-buscar-lugar">Buscar</button>
+          </div>
+          <ul id="lista-resultados-ubicacion" class="lista-resultados"></ul>
+        </div>
+
+        <div id="modo-coordenadas" class="modo-ubicacion">
+          <div class="fila-doble">
+            <div>
+              <label for="coord-lat">Latitud</label>
+              <input type="number" step="any" id="coord-lat" placeholder="-90 a 90" />
+            </div>
+            <div>
+              <label for="coord-lon">Longitud</label>
+              <input type="number" step="any" id="coord-lon" placeholder="-180 a 180" />
+            </div>
+          </div>
+          <label for="coord-nombre">Nombre para mostrar</label>
+          <input type="text" id="coord-nombre" placeholder="Ej: Zona colonial" />
+          <button type="button" id="btn-usar-coordenadas" class="btn-terciario">Usar estas coordenadas</button>
+        </div>
+
+        <div id="ubicacion-seleccionada" class="ubicacion-seleccionada oculto"></div>
+
+        <div id="seccion-sugerencias" class="seccion-sugerencias oculto">
+          <div class="sugerencias-encabezado">
+            <h3 id="titulo-sugerencias">Lugares cercanos</h3>
+            <button type="button" id="btn-ver-sugerencias" class="btn-terciario">Ver sugerencias</button>
+          </div>
+          <div id="lugares-cargando" class="cargando oculto">Buscando lugares cercanos...</div>
+          <div id="lugares-mensaje" class="mensaje oculto"></div>
+          <div id="lista-lugares" class="lista-lugares"></div>
+        </div>
+
+        <div id="mensaje-form" class="mensaje oculto" role="alert"></div>
+
+        <button type="submit" class="btn-principal">Guardar cita</button>
+      </form>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Tus citas</h2>
+      <div id="mensaje-lista" class="mensaje oculto" role="alert"></div>
+      <div id="cargando-lista" class="cargando">Cargando citas...</div>
+      <div id="linea-tiempo" class="linea-tiempo"></div>
+      <p id="sin-citas" class="sin-citas oculto">Aún no tienes citas guardadas. Cuéntame tu primera idea arriba.</p>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
