@@ -7,6 +7,7 @@
 // -----------------------------------------------------------------------
 const crypto = require('crypto');
 const usuarios = require('./usuarios');
+const correo = require('./correo');
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -119,6 +120,11 @@ async function manejarCallback(req, res) {
     const perfil = await respuestaPerfil.json();
 
     // 3) Crear o actualizar el usuario local, y guardar la sesion.
+    //    Verificamos ANTES si ya existia, para saber si este es un
+    //    registro nuevo de verdad (y por lo tanto, si corresponde
+    //    enviar el correo de bienvenida).
+    const existiaAntes = Boolean(await usuarios.obtenerUsuarioPorGoogleId(perfil.sub));
+
     const usuario = await usuarios.buscarOCrearUsuario({
       googleId: perfil.sub,
       nombre: perfil.name || perfil.email,
@@ -133,6 +139,16 @@ async function manejarCallback(req, res) {
         return res.status(500).send('Ocurrió un error al iniciar tu sesión. Intenta de nuevo.');
       }
       req.session.usuarioId = usuario.id;
+
+      if (!existiaAntes) {
+        // Disparamos el correo SIN esperar su resultado: el registro
+        // (este login) responde de inmediato, sin importar cuanto
+        // tarde el proveedor de correo o si falla.
+        correo.enviarCorreoBienvenida(usuario).catch((errCorreo) => {
+          console.error('[correo] No se pudo enviar el correo de bienvenida:', errCorreo.message);
+        });
+      }
+
       res.redirect('/');
     });
   } catch (err) {

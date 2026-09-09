@@ -30,6 +30,10 @@ gratuitos y sin necesidad de API Key.
    sugerencia práctica ("lleva paraguas", "usa protector solar", "día
    perfecto para tu plan"...).
 6. Puedes eliminar cualquier cita.
+7. **Correo de bienvenida**: la primera vez que alguien inicia sesión, le
+   llega automáticamente un correo de bienvenida (vía [Resend](https://resend.com)),
+   sin que nadie tenga que hacer clic en "enviar" y sin que el login espere
+   a que el correo termine de enviarse.
 
 ## ¿Por qué un backend intermedio?
 
@@ -84,6 +88,24 @@ hasta hacerlo.
    (Render u otro), agrega las mismas variables en su panel de
    Environment Variables — **nunca** subas el Client Secret al repositorio.
 
+## Configurar el correo de bienvenida (Resend)
+
+Es opcional: sin esto, el login funciona igual y el correo simplemente
+no se envía (queda una nota en los logs del servidor).
+
+1. Crea una cuenta gratuita en [resend.com](https://resend.com).
+2. Ve a **API Keys** → **Create API Key**, y copia la clave generada.
+3. Pégala en tu `.env` como `RESEND_API_KEY`.
+4. Para probar rápido, no necesitas verificar un dominio propio: Resend
+   permite enviar desde `onboarding@resend.dev` en modo de pruebas (ya
+   configurado por defecto en `CORREO_REMITENTE`). Cuando quieras enviar
+   desde tu propio dominio, verifica ese dominio en Resend y cambia
+   `CORREO_REMITENTE` por una dirección de ese dominio.
+5. Prueba iniciando sesión con una cuenta de Google que **nunca** haya
+   entrado antes a la app (el correo solo se envía en el primer login de
+   cada persona) y revisa esa bandeja de entrada — y la carpeta de spam,
+   por si acaso.
+
 ## Instalación
 
 ```bash
@@ -100,6 +122,8 @@ APP_BASE_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=tu_client_id
 GOOGLE_CLIENT_SECRET=tu_client_secret
 SESSION_SECRET=una_cadena_larga_y_aleatoria
+RESEND_API_KEY=
+CORREO_REMITENTE=Nuestras citas <onboarding@resend.dev>
 ```
 
 `SESSION_SECRET` puede generarse con `openssl rand -hex 32`. Si la dejas
@@ -122,6 +146,7 @@ nuestras-citas/
 ├── db.js                 # Persistencia de citas (JSON, escritura atomica, filtrado por usuario)
 ├── usuarios.js            # Persistencia de usuarios (JSON, escritura atomica)
 ├── auth.js                # Flujo OAuth con Google (intercambio en el backend) + middleware de sesion
+├── correo.js               # Correo de bienvenida via Resend (no bloquea el login)
 ├── analizador.js           # Interpreta texto libre: tipo de plan, con quien, fecha/hora
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
 ├── package.json
@@ -197,7 +222,9 @@ puede ser `"pronostico"`, `"historico"` o `"no_disponible"`.
   (`{ error, mensaje }`), manejo de archivos de datos corruptos o
   ausentes, protección CSRF en el login (parámetro `state`), y
   aislamiento estricto entre usuarios (una cita ajena responde `404`, no
-  `403`, para no confirmar que existe).
+  `403`, para no confirmar que existe), y el correo de bienvenida se
+  envía sin bloquear el login: si Resend falla o no está configurado, el
+  login sigue funcionando igual, solo queda una nota en los logs.
 - **Frontend:** cada fetch distingue error de red, respuesta no-JSON y
   error HTTP. Si la sesión expira a mitad de uso, la app vuelve a mostrar
   la puerta de login con un aviso, en vez de fallar en silencio. El clima
@@ -214,6 +241,8 @@ puede ser `"pronostico"`, `"historico"` o `"no_disponible"`.
 | `GOOGLE_CLIENT_ID`       | Sí, para el login | Client ID de Google Cloud Console                                |
 | `GOOGLE_CLIENT_SECRET`   | Sí, para el login | Client Secret de Google Cloud Console                             |
 | `SESSION_SECRET`         | Recomendada | Clave para firmar la cookie de sesión                                |
+| `RESEND_API_KEY`         | No          | API Key de Resend; sin ella, el correo de bienvenida se omite        |
+| `CORREO_REMITENTE`       | No          | Remitente del correo (por defecto, el de pruebas de Resend)          |
 
 El archivo `.env` **no** debe subirse a control de versiones.
 
