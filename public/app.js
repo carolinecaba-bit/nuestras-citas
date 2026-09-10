@@ -82,6 +82,7 @@ const elCuenta = document.getElementById('cuenta');
 const elPuertaLogin = document.getElementById('puerta-login');
 const elPuertaMensaje = document.getElementById('puerta-mensaje');
 const elContenidoApp = document.getElementById('contenido-app');
+const elMensajePago = document.getElementById('mensaje-pago');
 
 const inputTextoIdea = document.getElementById('texto-idea');
 const btnAnalizar = document.getElementById('btn-analizar');
@@ -515,9 +516,48 @@ function mostrarApp(usuario) {
   elCuenta.innerHTML = `
     ${usuario.avatarUrl ? `<img class="avatar" src="${usuario.avatarUrl}" alt="" referrerpolicy="no-referrer">` : ''}
     <span>${escaparHtml(usuario.nombre)}</span>
+    <button type="button" class="btn-apoyar" id="btn-apoyar">☕ Apoyar</button>
     <button type="button" class="btn-cerrar-sesion" id="btn-cerrar-sesion">Cerrar sesión</button>
   `;
   document.getElementById('btn-cerrar-sesion').addEventListener('click', cerrarSesion);
+  document.getElementById('btn-apoyar').addEventListener('click', iniciarPago);
+}
+
+async function iniciarPago() {
+  const boton = document.getElementById('btn-apoyar');
+  const textoOriginal = boton.textContent;
+  boton.disabled = true;
+  boton.textContent = 'Un momento...';
+
+  try {
+    const data = await llamarApi('/api/crear-pago', { method: 'POST' });
+    window.location.href = data.url;
+  } catch (err) {
+    boton.disabled = false;
+    boton.textContent = textoOriginal;
+    mostrarMensaje(elMensajePago, err.message);
+  }
+}
+
+/**
+ * Revisa si volvimos de Stripe (Checkout redirige con ?pago=exitoso o
+ * ?pago=cancelado) y muestra un aviso, luego limpia la URL para que un
+ * refresh no vuelva a mostrar el mismo mensaje.
+ */
+function revisarResultadoDePago() {
+  const parametros = new URLSearchParams(window.location.search);
+  const resultado = parametros.get('pago');
+  if (!resultado) return;
+
+  if (resultado === 'exitoso') {
+    mostrarMensaje(elMensajePago, '¡Gracias por tu apoyo! Te enviamos un correo de confirmación.', 'info');
+  } else if (resultado === 'cancelado') {
+    mostrarMensaje(elMensajePago, 'Cancelaste el pago. No se realizó ningún cargo.', 'info');
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete('pago');
+  window.history.replaceState({}, '', url.toString());
 }
 
 async function cerrarSesion() {
@@ -532,6 +572,7 @@ async function cerrarSesion() {
 }
 
 async function iniciar() {
+  revisarResultadoDePago();
   try {
     const data = await fetch('/api/usuario-actual').then((r) => r.json());
     if (data.usuario) {

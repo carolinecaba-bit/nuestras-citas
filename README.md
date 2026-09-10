@@ -34,6 +34,11 @@ gratuitos y sin necesidad de API Key.
    llega automáticamente un correo de bienvenida (vía [Resend](https://resend.com)),
    sin que nadie tenga que hacer clic en "enviar" y sin que el login espere
    a que el correo termine de enviarse.
+8. **Apoyar el proyecto (Stripe)**: cualquier usuario logueado puede hacer
+   un pago de apoyo ($3 USD) vía Stripe Checkout. Cuando el pago se
+   completa, Stripe le avisa a la app mediante un **webhook** (verificado
+   con firma), que registra el evento y envía un correo de agradecimiento
+   — todo sin bloquear la respuesta al usuario ni a Stripe.
 
 ## ¿Por qué un backend intermedio?
 
@@ -106,6 +111,41 @@ no se envía (queda una nota en los logs del servidor).
    cada persona) y revisa esa bandeja de entrada — y la carpeta de spam,
    por si acaso.
 
+## Configurar pagos (Stripe)
+
+Es opcional para que la app arranque, pero necesario para que el botón
+"☕ Apoyar" funcione. Usamos **modo de prueba** de Stripe (no se cobra
+dinero real, se paga con tarjetas de prueba).
+
+1. Crea una cuenta gratuita en [stripe.com](https://stripe.com) (o usa
+   una existente).
+2. Asegúrate de estar en **modo de prueba** (el interruptor "Test mode"
+   arriba a la derecha del Dashboard).
+3. Ve a **Developers** → **API keys**, copia la **Secret key** (empieza
+   con `sk_test_...`) y pégala en tu `.env` como `STRIPE_SECRET_KEY`.
+4. Despliega la app primero (siguiente sección) para tener una URL
+   pública — Stripe necesita poder llamar a esa URL.
+5. En el Dashboard de Stripe, ve a **Developers** → **Webhooks** →
+   **Add endpoint**:
+   - **Endpoint URL**: `https://tu-servicio.onrender.com/webhooks/stripe`
+   - **Events to send**: selecciona `checkout.session.completed`
+   - Crea el endpoint.
+6. Haz clic en el endpoint recién creado y copia el **Signing secret**
+   (empieza con `whsec_...`). Ese es tu `STRIPE_WEBHOOK_SECRET`.
+7. Agrega `STRIPE_SECRET_KEY` y `STRIPE_WEBHOOK_SECRET` en las
+   Environment Variables de Render (y en tu `.env` local si quieres
+   probar el botón de pago en local también — aunque el webhook en sí
+   solo lo puede llamar Stripe si tu app tiene una URL pública real, o
+   usando el [Stripe CLI](https://docs.stripe.com/stripe-cli) con
+   `stripe listen --forward-to localhost:3000/webhooks/stripe`, que te
+   da un webhook secret temporal para pruebas locales).
+
+**Probar de punta a punta**: inicia sesión, haz clic en "☕ Apoyar" arriba
+a la derecha, y en la pantalla de Stripe usa la tarjeta de prueba
+`4242 4242 4242 4242`, cualquier fecha futura y cualquier CVC. Al
+completar el pago, Stripe te regresa a la app con un aviso de éxito, y
+en unos segundos debería llegarte un correo de agradecimiento.
+
 ## Instalación
 
 ```bash
@@ -124,6 +164,8 @@ GOOGLE_CLIENT_SECRET=tu_client_secret
 SESSION_SECRET=una_cadena_larga_y_aleatoria
 RESEND_API_KEY=
 CORREO_REMITENTE=Nuestras citas <onboarding@resend.dev>
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
 ```
 
 `SESSION_SECRET` puede generarse con `openssl rand -hex 32`. Si la dejas
@@ -147,6 +189,8 @@ nuestras-citas/
 ├── usuarios.js            # Persistencia de usuarios (JSON, escritura atomica)
 ├── auth.js                # Flujo OAuth con Google (intercambio en el backend) + middleware de sesion
 ├── correo.js               # Correo de bienvenida via Resend (no bloquea el login)
+├── pagos.js                # Stripe: crea la sesion de Checkout y maneja el webhook
+├── eventosStripe.js         # Registro persistente de cada evento de webhook recibido
 ├── analizador.js           # Interpreta texto libre: tipo de plan, con quien, fecha/hora
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
 ├── package.json
@@ -215,6 +259,17 @@ responde `404`, igual que si no existiera).
 Devuelve el clima para la fecha de la cita (solo si es tuya). `estado`
 puede ser `"pronostico"`, `"historico"` o `"no_disponible"`.
 
+### `POST /api/crear-pago`
+Requiere sesión. Crea una sesión de Stripe Checkout ($3 USD, "apoyo" al
+proyecto) y devuelve `{ url }` — el frontend redirige el navegador ahí.
+
+### `POST /webhooks/stripe`
+Recibido directamente por Stripe (no por el frontend). Verifica la firma
+del evento, registra **todos** los eventos recibidos en
+`data/eventos-stripe.json`, y si el tipo es `checkout.session.completed`,
+envía un correo de agradecimiento al correo de quien pagó — sin esperar
+a que ese correo termine de enviarse antes de responderle a Stripe.
+
 ## Manejo de errores
 
 - **Backend:** try/catch en cada llamada externa, `AbortController` para
@@ -222,9 +277,13 @@ puede ser `"pronostico"`, `"historico"` o `"no_disponible"`.
   (`{ error, mensaje }`), manejo de archivos de datos corruptos o
   ausentes, protección CSRF en el login (parámetro `state`), y
   aislamiento estricto entre usuarios (una cita ajena responde `404`, no
-  `403`, para no confirmar que existe), y el correo de bienvenida se
+  `403`, para no confirmar que existe), el correo de bienvenida se
   envía sin bloquear el login: si Resend falla o no está configurado, el
-  login sigue funcionando igual, solo queda una nota en los logs.
+  login sigue funcionando igual, solo queda una nota en los logs. El
+  webhook de Stripe verifica la firma de cada evento antes de confiar en
+  su contenido (rechaza con `400` cualquier payload sin firma válida, sin
+  importar qué diga adentro), y responde `2xx` a Stripe de inmediato,
+  enviando el correo de agradecimiento por separado.
 - **Frontend:** cada fetch distingue error de red, respuesta no-JSON y
   error HTTP. Si la sesión expira a mitad de uso, la app vuelve a mostrar
   la puerta de login con un aviso, en vez de fallar en silencio. El clima
@@ -243,6 +302,8 @@ puede ser `"pronostico"`, `"historico"` o `"no_disponible"`.
 | `SESSION_SECRET`         | Recomendada | Clave para firmar la cookie de sesión                                |
 | `RESEND_API_KEY`         | No          | API Key de Resend; sin ella, el correo de bienvenida se omite        |
 | `CORREO_REMITENTE`       | No          | Remitente del correo (por defecto, el de pruebas de Resend)          |
+| `STRIPE_SECRET_KEY`      | No          | Clave secreta de Stripe (modo prueba); sin ella, "Apoyar" da un aviso claro |
+| `STRIPE_WEBHOOK_SECRET`  | No          | Signing secret del endpoint de webhook en el Dashboard de Stripe     |
 
 El archivo `.env` **no** debe subirse a control de versiones.
 
@@ -259,8 +320,8 @@ El archivo `.env` **no** debe subirse a control de versiones.
   guardar.
 - Las sesiones se guardan en memoria del proceso: se cierran todas si el
   servidor se reinicia. En hosts de plan gratuito (como Render Free) el
-  disco también es efímero, así que `data/citas.json` y
-  `data/usuarios.json` pueden reiniciarse a vacío cuando el servicio se
-  reinicia o "despierta" tras estar inactivo.
+  disco también es efímero, así que `data/citas.json`, `data/usuarios.json`
+  y `data/eventos-stripe.json` pueden reiniciarse a vacío cuando el
+  servicio se reinicia o "despierta" tras estar inactivo.
 - La comparación de fechas (pasado/futuro) usa la fecha del servidor, no
   la zona horaria del lugar de la cita.

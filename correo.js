@@ -35,6 +35,21 @@ function plantillaBienvenida(usuario) {
   `;
 }
 
+function plantillaConfirmacionPago({ nombre, monto, moneda }) {
+  const montoFormateado = typeof monto === 'number'
+    ? new Intl.NumberFormat('es', { style: 'currency', currency: (moneda || 'usd').toUpperCase() }).format(monto / 100)
+    : null;
+
+  return `
+    <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #3B2130;">
+      <h1 style="color:#A8395A; font-size: 22px;">¡Gracias, ${nombre}! ☕</h1>
+      <p>Recibimos tu apoyo${montoFormateado ? ` de <strong>${montoFormateado}</strong>` : ''} para
+      <strong>Nuestras citas</strong>.</p>
+      <p>Significa mucho para seguir mejorando la app. ¡Gracias de corazón!</p>
+    </div>
+  `;
+}
+
 /**
  * Envia el correo de bienvenida a un usuario recien registrado.
  *
@@ -76,4 +91,40 @@ async function enviarCorreoBienvenida(usuario) {
   console.log(`[correo] Correo de bienvenida enviado a ${usuario.email}`);
 }
 
-module.exports = { enviarCorreoBienvenida, configurado };
+/**
+ * Envia el correo de confirmacion cuando un pago se completa. Mismo
+ * principio que el correo de bienvenida: quien la llama NO debe hacer
+ * "await" antes de responder (en este caso, antes de responderle a
+ * Stripe en el webhook).
+ */
+async function enviarCorreoConfirmacionPago({ nombre, email, monto, moneda }) {
+  if (!configurado()) {
+    console.log('[correo] RESEND_API_KEY no configurada: se omite el correo de confirmacion de pago.');
+    return;
+  }
+
+  const remitente = process.env.CORREO_REMITENTE || 'Nuestras citas <onboarding@resend.dev>';
+
+  const respuesta = await fetchConTimeout(RESEND_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`
+    },
+    body: JSON.stringify({
+      from: remitente,
+      to: email,
+      subject: '¡Gracias por tu apoyo! ☕',
+      html: plantillaConfirmacionPago({ nombre, monto, moneda })
+    })
+  });
+
+  if (!respuesta.ok) {
+    const detalle = await respuesta.text().catch(() => '');
+    throw new Error(`Resend respondio con estado ${respuesta.status}: ${detalle}`);
+  }
+
+  console.log(`[correo] Correo de confirmacion de pago enviado a ${email}`);
+}
+
+module.exports = { enviarCorreoBienvenida, enviarCorreoConfirmacionPago, configurado };

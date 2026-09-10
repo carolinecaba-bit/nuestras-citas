@@ -15,6 +15,7 @@
     "chrono-node": "^2.10.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "express-session": "^1.19.0"
+    "express-session": "^1.19.0",
+    "stripe": "^22.6.2"
   }
 }

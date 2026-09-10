@@ -63,6 +63,18 @@ h1, h2, h3 {
   object-fit: cover;
 }
 
+.cuenta .btn-apoyar {
+  background: var(--dorado);
+  border: none;
+  color: white;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.cuenta .btn-apoyar:hover { opacity: 0.9; }
+.cuenta .btn-apoyar:disabled { opacity: 0.6; }
+
 .cuenta .btn-cerrar-sesion {
   background: none;
   border: 1px solid var(--borde);

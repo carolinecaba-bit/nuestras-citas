@@ -9,6 +9,7 @@ const { TIPOS_CITA, obtenerTipoPorId, analizarTexto } = require('./analizador');
 const { buscarLugares, ErrorServicioLugares } = require('./lugares');
 const usuarios = require('./usuarios');
 const auth = require('./auth');
+const pagos = require('./pagos');
 
 const app = express();
 
@@ -36,6 +37,14 @@ if (!SESSION_SECRET) {
 app.set('trust proxy', 1);
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// El webhook de Stripe necesita el cuerpo CRUDO (sin parsear) para poder
+// verificar la firma, asi que se monta con su propio parser ANTES del
+// express.json() global (que de otro modo consumiria el cuerpo primero).
+app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), (req, res) => {
+  pagos.manejarWebhook(req, res);
+});
+
 app.use(express.json());
 app.use(session({
   secret: SESSION_SECRET,
@@ -437,6 +446,30 @@ app.get('/api/usuario-actual', async (req, res) => {
     usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, avatarUrl: usuario.avatarUrl },
     loginConfigurado: true
   });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/crear-pago  — crea una sesion de Stripe Checkout para "apoyar"
+// el proyecto. Requiere sesion, para saber a que correo confirmar despues.
+// ---------------------------------------------------------------------------
+app.post('/api/crear-pago', auth.requiereSesion, async (req, res) => {
+  if (!pagos.credencialesConfiguradas()) {
+    return res.status(500).json({
+      error: 'pago_no_configurado',
+      mensaje: 'Los pagos no están configurados en este servidor (falta STRIPE_SECRET_KEY).'
+    });
+  }
+
+  try {
+    const usuario = await usuarios.obtenerUsuarioPorId(req.session.usuarioId);
+    const urlCheckout = await pagos.crearSesionCheckout({
+      usuarioId: req.session.usuarioId,
+      email: usuario ? usuario.email : undefined
+    });
+    res.json({ url: urlCheckout });
+  } catch (err) {
+    manejarError(err, res, 'creacion de pago');
+  }
 });
 
 app.get('/api/health', (_req, res) => res.json({ estado: 'ok' }));
