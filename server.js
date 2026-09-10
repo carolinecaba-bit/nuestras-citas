@@ -269,6 +269,10 @@ app.get('/api/sugerencias', async (req, res) => {
     res.json({ lugares });
   } catch (err) {
     if (err instanceof ErrorServicioLugares) {
+      console.error(
+        `[lugares] Fallo al consultar Overpass (tipo=${tipoId}, lat=${lat}, lon=${lon}):`,
+        err.detalleTecnico || err.message
+      );
       return res.status(502).json({
         error: 'error_servicio_externo',
         mensaje: `No se pudieron obtener sugerencias de lugares (${err.message}). Intenta de nuevo en un momento.`

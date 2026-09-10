@@ -313,8 +313,13 @@ El archivo `.env` **no** debe subirse a control de versiones.
 - El archivo histórico de Open-Meteo suele tener unos días de retraso; para
   el pasado muy reciente la app usa el endpoint de pronóstico como respaldo.
 - Overpass API es un servicio público compartido: en momentos de mucho uso
-  puede responder lento o con error; la app lo maneja con un timeout y un
-  mensaje claro para reintentar.
+  puede responder lento, con error, o incluso bloquear temporalmente
+  tráfico desde ciertos proveedores de hosting (una práctica común
+  anti-abuso). Para mitigarlo, la app prueba automáticamente tres
+  servidores espejo distintos en orden antes de darse por vencida; si
+  los tres fallan, el error queda registrado con el detalle exacto de
+  cada uno en los logs del servidor, y el usuario ve un mensaje claro
+  para reintentar.
 - El análisis de texto libre es heurístico (palabras clave + `chrono-node`
   para fechas en español): siempre revisa y ajusta los campos antes de
   guardar.

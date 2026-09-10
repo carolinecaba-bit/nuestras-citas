@@ -2,8 +2,17 @@
 // Busca lugares reales cercanos (parques, restaurantes, playas, etc.)
 // usando Overpass API, la interfaz de consultas de OpenStreetMap.
 // Es un servicio publico y gratuito que no requiere API Key.
+//
+// Overpass tiene varios servidores espejo publicos independientes. Si el
+// principal esta caido, sobrecargado, o bloquea trafico de ciertos
+// proveedores de hosting, probamos los siguientes en orden antes de
+// darnos por vencidos.
 // -----------------------------------------------------------------------
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_URLS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter'
+];
 const TIMEOUT_MS = 12000;
 
 class ErrorServicioLugares extends Error {}
@@ -58,32 +67,47 @@ function etiquetaGenerica(categoria) {
 }
 
 /**
+ * Intenta la consulta contra cada servidor espejo en orden. Devuelve la
+ * primera respuesta EXITOSA (HTTP ok). Si un espejo falla al conectar,
+ * se agota el tiempo, o responde con un error HTTP, se intenta el
+ * siguiente antes de darse por vencido.
+ */
+async function pedirAAlgunEspejo(consulta) {
+  const errores = [];
+
+  for (const url of OVERPASS_URLS) {
+    try {
+      const respuesta = await fetchConTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'planificador-citas-clima (uso personal, sin fines comerciales)'
+        },
+        body: `data=${encodeURIComponent(consulta)}`
+      });
+
+      if (respuesta.ok) {
+        return respuesta;
+      }
+      errores.push(`${url} -> estado ${respuesta.status}`);
+    } catch (err) {
+      const motivo = err.name === 'AbortError' ? 'tiempo agotado' : err.message;
+      errores.push(`${url} -> ${motivo}`);
+    }
+  }
+
+  const errorEnvuelto = new ErrorServicioLugares('no se pudo conectar con el servicio de lugares');
+  errorEnvuelto.detalleTecnico = errores.join(' | ');
+  throw errorEnvuelto;
+}
+
+/**
  * Busca hasta `maximo` lugares reales cerca de (lat, lon) que coincidan
  * con alguno de los tags de OpenStreetMap dados (ej: "leisure=park").
  */
 async function buscarLugares(tagsOverpass, lat, lon, { radioMetros = 4000, maximo = 6 } = {}) {
   const consulta = construirConsulta(tagsOverpass, lat, lon, radioMetros);
-
-  let respuesta;
-  try {
-    respuesta = await fetchConTimeout(OVERPASS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'planificador-citas-clima (uso personal, sin fines comerciales)'
-      },
-      body: `data=${encodeURIComponent(consulta)}`
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new ErrorServicioLugares('tiempo agotado');
-    }
-    throw new ErrorServicioLugares('no se pudo conectar con el servicio de lugares');
-  }
-
-  if (!respuesta.ok) {
-    throw new ErrorServicioLugares(`estado ${respuesta.status}`);
-  }
+  const respuesta = await pedirAAlgunEspejo(consulta);
 
   let data;
   try {
