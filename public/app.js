@@ -433,7 +433,7 @@ btnBuscarLugar.addEventListener('click', async () => {
     data.resultados.forEach((lugar) => {
       const item = document.createElement('li');
       const region = lugar.region ? `${lugar.region}, ` : '';
-      item.textContent = `${lugar.nombre} — ${region}${lugar.pais || ''}`;
+      item.textContent = `${lugar.nombre} · ${region}${lugar.pais || ''}`;
       item.addEventListener('click', () => {
         fijarUbicacion({ nombre: lugar.nombre, lat: lugar.latitud, lon: lugar.longitud });
         listaResultadosUbicacion.innerHTML = '';
