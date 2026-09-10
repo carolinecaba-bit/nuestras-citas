@@ -1,61 +1,70 @@
 # Nuestras citas
 
 Planificador de citas románticas con cuentas privadas. Cada quien inicia
-sesión con su cuenta de Google y solo ve sus propias citas. Escribes una
-idea en lenguaje natural (o llenas el formulario a mano), la app interpreta
-tipo de plan, con quién y fecha/hora, te sugiere lugares reales cercanos
-según la actividad, y te muestra el clima esperado (o el que hizo, si la
-cita ya pasó) — usando [Open-Meteo](https://open-meteo.com/) y
+sesión con su cuenta de Google y solo ve sus propias citas y perfiles.
+Eliges el tipo de plan, la fecha y la hora, opcionalmente con quién (de
+tus perfiles guardados), la app te sugiere lugares reales cercanos según
+la actividad, y te muestra el clima esperado (o el que hizo, si la cita
+ya pasó) — usando [Open-Meteo](https://open-meteo.com/) y
 [OpenStreetMap](https://www.openstreetmap.org/) (Overpass API), ambos
 gratuitos y sin necesidad de API Key.
 
 ## ¿Qué hace?
 
-1. **Inicia sesión con Google**: tus citas son privadas: solo tú (con la
-   cuenta de Google que uses) las ves. No hay contraseñas que manejar ni
-   guardar.
-2. **Cuéntame tu idea**: escribes algo como *"picnic con mi novia el jueves
-   a las 3:00 pm"* y la app interpreta automáticamente (usando
-   `chrono-node`, sin llamadas externas) el tipo de plan, con quién es, la
-   fecha y la hora. Todo queda editable antes de guardar.
-3. **Ubicación general**: buscas una ciudad/zona por nombre o ingresas
+1. **Inicia sesión con Google**: tus citas y perfiles son privados: solo tú
+   (con la cuenta de Google que uses) los ves. No hay contraseñas que
+   manejar ni guardar.
+2. **Tus personas**: guarda perfiles simples de con quién sales — nombre,
+   relación (novia, madre, amigo...), cumpleaños, comida favorita y notas
+   libres (alergias, gustos, tallas...). Se reutilizan al crear citas, sin
+   volver a escribir lo mismo cada vez.
+3. **Detalles del plan directos**: eliges tipo de plan, fecha y hora desde
+   el primer momento. La hora se elige con un selector agrupado
+   (Mañana/Tarde/Noche) en formato de 12 horas, en vez del reloj nativo
+   del navegador. El título es opcional: si lo dejas vacío, se genera solo
+   (ej. "Cena romántica con Ana").
+4. **Ubicación general**: buscas una ciudad/zona por nombre o ingresas
    coordenadas.
-4. **Sugerencias de lugares**: según el tipo de plan (picnic, cena, café,
+5. **Sugerencias de lugares**: según el tipo de plan (picnic, cena, café,
    playa, mirador, cine, caminata...), la app busca lugares reales cercanos
    a esa ubicación (parques, restaurantes, playas, miradores, etc.) usando
    OpenStreetMap, y puedes elegir uno.
-5. **Clima con consejo práctico**: cada cita en tu lista muestra el
+6. **Clima con consejo práctico**: cada cita en tu lista muestra el
    pronóstico (si es futura, hasta 16 días) o el clima histórico real (si
    ya pasó), con un color e ícono según qué tan favorable luce, y una
    sugerencia práctica ("lleva paraguas", "usa protector solar", "día
    perfecto para tu plan"...).
-6. Puedes eliminar cualquier cita.
-7. **Correo de bienvenida**: la primera vez que alguien inicia sesión, le
+7. **Aviso de cumpleaños**: si la fecha de una cita coincide con el
+   cumpleaños de la persona elegida, la tarjeta lo resalta con un aviso
+   especial 🎂.
+8. Puedes eliminar cualquier cita o perfil.
+9. **Correo de bienvenida**: la primera vez que alguien inicia sesión, le
    llega automáticamente un correo de bienvenida (vía [Resend](https://resend.com)),
    sin que nadie tenga que hacer clic en "enviar" y sin que el login espere
    a que el correo termine de enviarse.
-8. **Apoyar el proyecto (Stripe)**: cualquier usuario logueado puede hacer
-   un pago de apoyo ($3 USD) vía Stripe Checkout. Cuando el pago se
-   completa, Stripe le avisa a la app mediante un **webhook** (verificado
-   con firma), que registra el evento y envía un correo de agradecimiento
-   — todo sin bloquear la respuesta al usuario ni a Stripe.
+10. **Apoyar el proyecto (Stripe)**: cualquier usuario logueado puede hacer
+    un pago de apoyo ($3 USD) vía Stripe Checkout. Cuando el pago se
+    completa, Stripe le avisa a la app mediante un **webhook** (verificado
+    con firma), que registra el evento y envía un correo de agradecimiento
+    — todo sin bloquear la respuesta al usuario ni a Stripe.
 
 ## ¿Por qué un backend intermedio?
 
 El frontend nunca llama a Open-Meteo, OpenStreetMap ni Google directamente;
 llama a nuestro propio servidor, que:
 
-1. Guarda las citas y los usuarios en archivos locales (`data/citas.json`,
-   `data/usuarios.json`), con escritura atómica para no corromper el
-   archivo si el proceso se interrumpe.
+1. Guarda las citas, los perfiles y los usuarios en archivos locales
+   (`data/citas.json`, `data/personas.json`, `data/usuarios.json`), con
+   escritura atómica para no corromper el archivo si el proceso se
+   interrumpe.
 2. Intercambia el código de autorización de Google por un token **del
    lado del servidor** — el Client Secret de Google nunca toca el
    navegador.
 3. Decide si debe pedir pronóstico o histórico según la fecha.
 4. Traduce el tipo de plan a los "tags" correctos de OpenStreetMap para
    buscar lugares relevantes.
-5. Filtra las citas por el usuario de la sesión actual, para que nadie
-   vea ni pueda borrar las citas de otra persona.
+5. Filtra las citas y los perfiles por el usuario de la sesión actual,
+   para que nadie vea ni pueda usar/editar/borrar los de otra persona.
 
 > **Nota:** Open-Meteo y la Overpass API de OpenStreetMap son gratuitos y
 > no requieren API Key para uso normal. Este proyecto soporta una API Key
@@ -187,17 +196,18 @@ nuestras-citas/
 ├── server.js            # Backend Express: rutas, sesiones, validaciones, orquesta clima y lugares
 ├── db.js                 # Persistencia de citas (JSON, escritura atomica, filtrado por usuario)
 ├── usuarios.js            # Persistencia de usuarios (JSON, escritura atomica)
+├── personas.js             # Persistencia de perfiles de personas (JSON, escritura atomica, filtrado por usuario)
 ├── auth.js                # Flujo OAuth con Google (intercambio en el backend) + middleware de sesion
 ├── correo.js               # Correo de bienvenida via Resend (no bloquea el login)
 ├── pagos.js                # Stripe: crea la sesion de Checkout y maneja el webhook
 ├── eventosStripe.js         # Registro persistente de cada evento de webhook recibido
-├── analizador.js           # Interpreta texto libre: tipo de plan, con quien, fecha/hora
+├── analizador.js           # Catalogo de tipos de plan (picnic, cena, etc.) y sus tags de OpenStreetMap
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
 ├── package.json
 ├── .env.example
-├── data/                   # Se crea automaticamente; guarda citas.json y usuarios.json
+├── data/                   # Se crea automaticamente; guarda citas.json, personas.json y usuarios.json
 ├── public/
-│   ├── index.html          # Puerta de login + formulario + lista de citas
+│   ├── index.html          # Puerta de login + perfiles + formulario + lista de citas
 │   ├── style.css             # Identidad visual (Fraunces + Karla, paleta rosa/dorado)
 │   └── app.js                # Logica del frontend
 └── README.md
@@ -213,15 +223,40 @@ nuestras-citas/
 - **`GET /api/usuario-actual`** — devuelve `{ usuario, loginConfigurado }`.
   `usuario` es `null` si no hay sesión activa.
 
-Todas las rutas de `/api/citas*` abajo requieren sesión activa; sin ella
+Todas las rutas de `/api/citas*` y `/api/personas*` abajo requieren sesión
+activa; sin ella
 responden `401 { error: "no_autenticado" }`.
 
 ### `GET /api/tipos-cita`
 Catálogo de tipos de plan disponibles (picnic, cena, café, playa, etc.).
 
-### `POST /api/analizar-texto`
-Interpreta una frase libre. Cuerpo: `{ "texto": "..." }`. Devuelve
-`{ titulo, tipo, conQuien, fecha, hora, advertencia }`.
+### `GET /api/relaciones`
+Lista de relaciones sugeridas para el campo "relación" de un perfil (el
+usuario puede escribir cualquier otra si ninguna calza).
+
+### `GET /api/personas`
+Lista **tus** perfiles guardados.
+
+### `POST /api/personas`
+Crea un perfil. Cuerpo esperado:
+
+```json
+{
+  "nombre": "Ana",
+  "relacion": "Novia",
+  "cumpleanos": "1998-09-20",
+  "comidaFavorita": "Pizza",
+  "notas": "Alérgica al maní"
+}
+```
+
+`cumpleanos`, `comidaFavorita` y `notas` son opcionales.
+
+### `PUT /api/personas/:id`
+Edita un perfil (mismo cuerpo que crearlo), solo si es tuyo.
+
+### `DELETE /api/personas/:id`
+Elimina un perfil, solo si es tuyo.
 
 ### `GET /api/geocode?q=<nombre>`
 Busca hasta 5 ubicaciones que coincidan con el texto dado.
@@ -238,18 +273,20 @@ Crea una cita para el usuario de la sesión actual. Cuerpo esperado:
 
 ```json
 {
-  "titulo": "Picnic con mi novia",
-  "tipo": "picnic",
-  "conQuien": "mi novia",
+  "titulo": null,
+  "tipo": "cena",
+  "personaId": "id-de-un-perfil-existente",
   "fecha": "2026-09-10",
-  "hora": "15:00",
+  "hora": "19:30",
   "ubicacion": { "nombre": "Santo Domingo", "lat": 18.4861, "lon": -69.9312 },
   "lugarSugerido": { "nombre": "Parque Mirador Sur", "lat": 18.45, "lon": -69.95, "enlaceMapa": "..." }
 }
 ```
 
-`lugarSugerido` es opcional; si no se elige uno, el clima se calcula con
-las coordenadas de `ubicacion`.
+`titulo`, `personaId`, `hora` y `lugarSugerido` son opcionales. Si
+`titulo` se deja vacío, se genera automáticamente a partir del tipo de
+plan y el nombre del perfil (si se eligió uno). Si `personaId` no
+corresponde a un perfil tuyo, la petición se rechaza.
 
 ### `DELETE /api/citas/:id`
 Elimina una cita, solo si pertenece al usuario de la sesión actual (si no,
@@ -276,8 +313,8 @@ a que ese correo termine de enviarse antes de responderle a Stripe.
   timeouts, validación de entradas, respuestas JSON consistentes
   (`{ error, mensaje }`), manejo de archivos de datos corruptos o
   ausentes, protección CSRF en el login (parámetro `state`), y
-  aislamiento estricto entre usuarios (una cita ajena responde `404`, no
-  `403`, para no confirmar que existe), el correo de bienvenida se
+  aislamiento estricto entre usuarios (una cita o un perfil ajeno
+  responde `404`, no `403`, para no confirmar que existe). El correo de bienvenida se
   envía sin bloquear el login: si Resend falla o no está configurado, el
   login sigue funcionando igual, solo queda una nota en los logs. El
   webhook de Stripe verifica la firma de cada evento antes de confiar en
@@ -320,13 +357,10 @@ El archivo `.env` **no** debe subirse a control de versiones.
   los tres fallan, el error queda registrado con el detalle exacto de
   cada uno en los logs del servidor, y el usuario ve un mensaje claro
   para reintentar.
-- El análisis de texto libre es heurístico (palabras clave + `chrono-node`
-  para fechas en español): siempre revisa y ajusta los campos antes de
-  guardar.
 - Las sesiones se guardan en memoria del proceso: se cierran todas si el
   servidor se reinicia. En hosts de plan gratuito (como Render Free) el
-  disco también es efímero, así que `data/citas.json`, `data/usuarios.json`
-  y `data/eventos-stripe.json` pueden reiniciarse a vacío cuando el
-  servicio se reinicia o "despierta" tras estar inactivo.
+  disco también es efímero, así que `data/citas.json`, `data/personas.json`,
+  `data/usuarios.json` y `data/eventos-stripe.json` pueden reiniciarse a
+  vacío cuando el servicio se reinicia o "despierta" tras estar inactivo.
 - La comparación de fechas (pasado/futuro) usa la fecha del servidor, no
   la zona horaria del lugar de la cita.

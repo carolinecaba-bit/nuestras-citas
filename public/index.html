@@ -16,7 +16,7 @@
       <div id="cuenta" class="cuenta"></div>
       <p class="hero-linea">Un espacio para planear momentos</p>
       <h1>Nuestras citas</h1>
-      <p class="hero-sub">Escribe la idea, revisa el clima y descubre dónde hacerla — todo en un solo lugar.</p>
+      <p class="hero-sub">Elige el plan, revisa el clima y descubre dónde hacerlo — todo en un solo lugar.</p>
     </header>
 
     <section id="puerta-login" class="tarjeta puerta-login oculto">
@@ -35,41 +35,75 @@
 
     <div id="contenido-app" class="oculto">
 
-    <section class="postal">
-      <h2>Cuéntame tu idea</h2>
-      <p class="postal-ejemplo">Por ejemplo: «picnic con mi novia el jueves a las 3:00 pm»</p>
-      <textarea id="texto-idea" rows="2" placeholder="Escribe tu idea de cita..."></textarea>
-      <button type="button" id="btn-analizar" class="btn-secundario">Analizar idea</button>
-      <p id="mensaje-analisis" class="mensaje oculto" role="status"></p>
+    <section class="tarjeta">
+      <h2>Tus personas</h2>
+      <p class="tarjeta-subtitulo">Guarda perfiles simples de con quién sales, para no volver a escribirlo cada vez.</p>
+
+      <form id="form-persona" class="formulario" autocomplete="off">
+        <div class="fila-doble">
+          <div>
+            <label for="persona-nombre">Nombre</label>
+            <input type="text" id="persona-nombre" placeholder="Ej: Ana" />
+          </div>
+          <div>
+            <label for="persona-relacion">Relación</label>
+            <select id="persona-relacion"></select>
+            <input type="text" id="persona-relacion-otra" class="oculto" placeholder="Escribe la relación" />
+          </div>
+        </div>
+
+        <div class="fila-doble">
+          <div>
+            <label for="persona-cumpleanos">Cumpleaños (opcional)</label>
+            <input type="date" id="persona-cumpleanos" />
+          </div>
+          <div>
+            <label for="persona-comida">Comida favorita (opcional)</label>
+            <input type="text" id="persona-comida" placeholder="Ej: Pizza" />
+          </div>
+        </div>
+
+        <label for="persona-notas">Notas (opcional)</label>
+        <textarea id="persona-notas" rows="2" placeholder="Alergias, gustos, tallas... lo que quieras recordar"></textarea>
+
+        <div id="mensaje-persona" class="mensaje oculto" role="alert"></div>
+
+        <div class="fila-botones-persona">
+          <button type="submit" class="btn-principal" id="btn-guardar-persona">Guardar persona</button>
+          <button type="button" class="btn-terciario oculto" id="btn-cancelar-edicion-persona">Cancelar edición</button>
+        </div>
+      </form>
+
+      <div id="cargando-personas" class="cargando oculto">Cargando personas...</div>
+      <div id="lista-personas" class="lista-personas"></div>
+      <p id="sin-personas" class="sin-citas oculto">Aún no has agregado a nadie.</p>
     </section>
 
     <section class="tarjeta">
       <h2>Detalles del plan</h2>
       <form id="form-cita" class="formulario" autocomplete="off">
-        <label for="cita-titulo">Título</label>
-        <input type="text" id="cita-titulo" placeholder="Ej: Picnic con mi novia" />
-
         <div class="fila-doble">
           <div>
             <label for="cita-tipo">Tipo de plan</label>
             <select id="cita-tipo"></select>
           </div>
           <div>
-            <label for="cita-con-quien">Con quién (opcional)</label>
-            <input type="text" id="cita-con-quien" placeholder="Ej: mi novia" />
-          </div>
-        </div>
-
-        <div class="fila-doble">
-          <div>
             <label for="cita-fecha">Fecha</label>
             <input type="date" id="cita-fecha" />
           </div>
-          <div>
-            <label for="cita-hora">Hora (opcional)</label>
-            <input type="time" id="cita-hora" />
-          </div>
         </div>
+
+        <label for="cita-hora">Hora (opcional)</label>
+        <select id="cita-hora"></select>
+
+        <label for="cita-persona">Con quién (opcional)</label>
+        <div class="fila">
+          <select id="cita-persona"></select>
+          <button type="button" class="btn-terciario" id="btn-ir-a-personas">+ Nueva persona</button>
+        </div>
+
+        <label for="cita-titulo">Título (opcional — se genera solo si lo dejas vacío)</label>
+        <input type="text" id="cita-titulo" placeholder="Ej: Picnic con Ana" />
 
         <label>Ubicación general</label>
         <div class="tabs-ubicacion" role="tablist">
@@ -124,7 +158,7 @@
       <div id="mensaje-lista" class="mensaje oculto" role="alert"></div>
       <div id="cargando-lista" class="cargando">Cargando citas...</div>
       <div id="linea-tiempo" class="linea-tiempo"></div>
-      <p id="sin-citas" class="sin-citas oculto">Aún no tienes citas guardadas. Cuéntame tu primera idea arriba.</p>
+      <p id="sin-citas" class="sin-citas oculto">Aún no tienes citas guardadas. Crea tu primer plan arriba.</p>
     </section>
 
     </div>

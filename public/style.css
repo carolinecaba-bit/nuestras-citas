@@ -127,40 +127,6 @@ h1, h2, h3 {
   font-size: 15px;
 }
 
-/* ---------- Postal (caja de idea libre) ---------- */
-
-.postal {
-  background: var(--superficie);
-  border: 1.5px dashed var(--acento);
-  border-radius: var(--radio);
-  padding: 22px 24px;
-  transform: rotate(-0.6deg);
-  margin-bottom: 28px;
-  position: relative;
-}
-
-.postal h2 { font-size: 20px; }
-
-.postal-ejemplo {
-  color: var(--texto-suave);
-  font-size: 13px;
-  margin: 6px 0 14px;
-  font-style: italic;
-}
-
-.postal textarea {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid var(--borde);
-  border-radius: var(--radio-chico);
-  font-family: 'Karla', sans-serif;
-  font-size: 15px;
-  resize: vertical;
-  background: var(--fondo);
-}
-
-.postal textarea:focus { outline: 2px solid var(--acento); }
-
 /* ---------- Tarjetas generales ---------- */
 
 .tarjeta {
@@ -172,6 +138,70 @@ h1, h2, h3 {
 }
 
 .tarjeta h2 { font-size: 20px; margin-bottom: 14px; }
+
+.tarjeta-subtitulo {
+  color: var(--texto-suave);
+  font-size: 13px;
+  margin: -8px 0 14px;
+}
+
+/* ---------- Personas (perfiles) ---------- */
+
+.fila-botones-persona {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.fila-botones-persona .btn-principal { margin-top: 0; flex: 1; }
+.fila-botones-persona .btn-terciario { flex: none; }
+
+.lista-personas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.persona-card {
+  border: 1px solid var(--borde);
+  border-left: 4px solid var(--acento);
+  border-radius: var(--radio-chico);
+  padding: 12px 14px;
+  background: var(--fondo);
+}
+
+.persona-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.persona-header h4 {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+}
+.persona-relacion {
+  font-size: 11px;
+  color: var(--acento);
+  background: #FDF1F5;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.persona-dato {
+  font-size: 13px;
+  color: var(--texto-suave);
+  margin-top: 6px;
+}
+.persona-notas { font-style: italic; }
+
+.persona-acciones {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
 
 /* ---------- Formulario ---------- */
 
@@ -192,7 +222,7 @@ h1, h2, h3 {
   gap: 12px;
 }
 
-input[type="text"], input[type="number"], input[type="date"], input[type="time"], select {
+input[type="text"], input[type="number"], input[type="date"], input[type="time"], select, textarea {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--borde);
@@ -203,7 +233,8 @@ input[type="text"], input[type="number"], input[type="date"], input[type="time"]
   color: var(--texto);
 }
 
-input:focus, select:focus { outline: 2px solid var(--acento); }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--acento); }
+textarea { resize: vertical; font-family: 'Karla', sans-serif; }
 
 /* ---------- Botones ---------- */
 
@@ -454,6 +485,17 @@ button { font-family: inherit; cursor: pointer; }
   color: var(--texto-suave);
   font-size: 13px;
   margin-top: 4px;
+}
+
+.cita-cumpleanos {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #FFF8E6;
+  color: #A87B1E;
+  border-radius: var(--radio-chico);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-block;
 }
 
 .cita-lugar {

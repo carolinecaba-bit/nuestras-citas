@@ -5,9 +5,10 @@ const session = require('express-session');
 const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
-const { TIPOS_CITA, obtenerTipoPorId, analizarTexto } = require('./analizador');
+const { TIPOS_CITA, obtenerTipoPorId } = require('./analizador');
 const { buscarLugares, ErrorServicioLugares } = require('./lugares');
 const usuarios = require('./usuarios');
+const personas = require('./personas');
 const auth = require('./auth');
 const pagos = require('./pagos');
 
@@ -172,27 +173,6 @@ app.get('/api/tipos-cita', (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/analizar-texto  — interpreta una frase libre
-// ---------------------------------------------------------------------------
-app.post('/api/analizar-texto', (req, res) => {
-  const { texto } = req.body || {};
-
-  if (!texto || typeof texto !== 'string' || texto.trim().length < 4) {
-    return res.status(400).json({
-      error: 'parametro_invalido',
-      mensaje: 'Escribe una frase un poco mas larga para poder analizarla.'
-    });
-  }
-
-  try {
-    const resultado = analizarTexto(texto.trim());
-    res.json(resultado);
-  } catch (err) {
-    manejarError(err, res, 'analisis de texto');
-  }
-});
-
-// ---------------------------------------------------------------------------
 // GET /api/geocode?q=nombreDeLugar
 // ---------------------------------------------------------------------------
 app.get('/api/geocode', async (req, res) => {
@@ -283,8 +263,129 @@ app.get('/api/sugerencias', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/relaciones  — sugerencias para el campo "relacion" de un perfil
+// ---------------------------------------------------------------------------
+app.get('/api/relaciones', (_req, res) => {
+  res.json({ relaciones: personas.RELACIONES_SUGERIDAS });
+});
+
+function validarPersona(body) {
+  const errores = [];
+  const { nombre, relacion, cumpleanos, comidaFavorita, notas } = body || {};
+
+  if (!nombre || typeof nombre !== 'string' || nombre.trim().length < 2) {
+    errores.push('El nombre debe tener al menos 2 caracteres.');
+  }
+  if (!relacion || typeof relacion !== 'string' || relacion.trim().length < 2) {
+    errores.push('Debes indicar la relación (ej: novia, madre, amigo...).');
+  }
+  if (cumpleanos && (typeof cumpleanos !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(cumpleanos) || Number.isNaN(new Date(`${cumpleanos}T00:00:00Z`).getTime()))) {
+    errores.push('El cumpleaños debe tener formato AAAA-MM-DD y ser una fecha válida.');
+  }
+  if (comidaFavorita !== undefined && comidaFavorita !== null && typeof comidaFavorita !== 'string') {
+    errores.push('La comida favorita no es válida.');
+  }
+  if (notas !== undefined && notas !== null && typeof notas !== 'string') {
+    errores.push('Las notas no son válidas.');
+  }
+
+  return errores;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/personas  — listar MIS perfiles
+// ---------------------------------------------------------------------------
+app.get('/api/personas', auth.requiereSesion, async (req, res) => {
+  try {
+    const lista = await personas.obtenerPersonas(req.session.usuarioId);
+    res.json({ personas: lista });
+  } catch (err) {
+    manejarError(err, res, 'lectura de personas');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/personas  — crear un perfil
+// ---------------------------------------------------------------------------
+app.post('/api/personas', auth.requiereSesion, async (req, res) => {
+  const errores = validarPersona(req.body);
+  if (errores.length > 0) {
+    return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
+  }
+
+  const { nombre, relacion, cumpleanos, comidaFavorita, notas } = req.body;
+
+  try {
+    const nuevaPersona = await personas.crearPersona({
+      usuarioId: req.session.usuarioId,
+      nombre: nombre.trim(),
+      relacion: relacion.trim(),
+      cumpleanos: cumpleanos || null,
+      comidaFavorita: comidaFavorita ? comidaFavorita.trim() : null,
+      notas: notas ? notas.trim() : null
+    });
+    res.status(201).json({ persona: nuevaPersona });
+  } catch (err) {
+    manejarError(err, res, 'creacion de persona');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/personas/:id  — editar un perfil (solo si es mio)
+// ---------------------------------------------------------------------------
+app.put('/api/personas/:id', auth.requiereSesion, async (req, res) => {
+  const errores = validarPersona(req.body);
+  if (errores.length > 0) {
+    return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
+  }
+
+  const { nombre, relacion, cumpleanos, comidaFavorita, notas } = req.body;
+
+  try {
+    const actualizada = await personas.actualizarPersona(req.params.id, req.session.usuarioId, {
+      nombre: nombre.trim(),
+      relacion: relacion.trim(),
+      cumpleanos: cumpleanos || null,
+      comidaFavorita: comidaFavorita ? comidaFavorita.trim() : null,
+      notas: notas ? notas.trim() : null
+    });
+    if (!actualizada) {
+      return res.status(404).json({ error: 'no_encontrada', mensaje: 'No existe ese perfil.' });
+    }
+    res.json({ persona: actualizada });
+  } catch (err) {
+    manejarError(err, res, 'edicion de persona');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/personas/:id  — eliminar un perfil (solo si es mio)
+// ---------------------------------------------------------------------------
+app.delete('/api/personas/:id', auth.requiereSesion, async (req, res) => {
+  try {
+    const eliminada = await personas.eliminarPersona(req.params.id, req.session.usuarioId);
+    if (!eliminada) {
+      return res.status(404).json({ error: 'no_encontrada', mensaje: 'No existe ese perfil.' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    manejarError(err, res, 'eliminacion de persona');
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Validacion de una cita entrante
 // ---------------------------------------------------------------------------
+/**
+ * Genera un titulo por defecto cuando el usuario no escribio uno, a
+ * partir del tipo de plan y (si se eligio) el nombre de la persona.
+ */
+function generarTituloPorDefecto(tipoId, persona) {
+  const tipo = obtenerTipoPorId(tipoId);
+  const etiquetaTipo = tipo ? tipo.etiqueta : 'Plan';
+  return persona ? `${etiquetaTipo} con ${persona.nombre}` : etiquetaTipo;
+}
+
 function validarUbicacion(ubicacion, campo) {
   const errores = [];
   if (!ubicacion || typeof ubicacion !== 'object') {
@@ -307,18 +408,20 @@ function validarUbicacion(ubicacion, campo) {
 
 function validarCita(body) {
   const errores = [];
-  const { titulo, tipo, conQuien, fecha, hora, ubicacion, lugarSugerido } = body || {};
+  const { titulo, tipo, personaId, fecha, hora, ubicacion, lugarSugerido } = body || {};
 
-  if (!titulo || typeof titulo !== 'string' || titulo.trim().length < 2) {
-    errores.push('El titulo debe tener al menos 2 caracteres.');
+  // El titulo ahora es opcional: si se deja vacio, se genera uno
+  // automaticamente a partir del tipo de plan y la persona elegida.
+  if (titulo !== undefined && titulo !== null && typeof titulo !== 'string') {
+    errores.push('El título no es válido.');
   }
 
   if (!tipo || !obtenerTipoPorId(tipo)) {
     errores.push('Debes indicar un tipo de plan valido.');
   }
 
-  if (conQuien !== undefined && conQuien !== null && typeof conQuien !== 'string') {
-    errores.push('El campo "con quien" no es valido.');
+  if (personaId !== undefined && personaId !== null && typeof personaId !== 'string') {
+    errores.push('El perfil seleccionado no es válido.');
   }
 
   if (!fecha || typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || Number.isNaN(new Date(`${fecha}T00:00:00Z`).getTime())) {
@@ -359,14 +462,29 @@ app.post('/api/citas', auth.requiereSesion, async (req, res) => {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
   }
 
-  const { titulo, tipo, conQuien, fecha, hora, ubicacion, lugarSugerido } = req.body;
+  const { titulo, tipo, personaId, fecha, hora, ubicacion, lugarSugerido } = req.body;
 
   try {
+    // Si se indico un personaId, confirmamos que sea un perfil del
+    // usuario actual (nunca de otra persona) y lo usamos para generar
+    // un titulo por defecto si no se escribio uno.
+    let persona = null;
+    if (personaId) {
+      persona = await personas.obtenerPersonaPorId(personaId, req.session.usuarioId);
+      if (!persona) {
+        return res.status(400).json({ error: 'datos_invalidos', mensaje: 'El perfil seleccionado no existe.' });
+      }
+    }
+
+    const tituloFinal = titulo && titulo.trim()
+      ? titulo.trim()
+      : generarTituloPorDefecto(tipo, persona);
+
     const nuevaCita = await db.crearCita({
       usuarioId: req.session.usuarioId,
-      titulo: titulo.trim(),
+      titulo: tituloFinal,
       tipo,
-      conQuien: conQuien ? conQuien.trim() : null,
+      personaId: persona ? persona.id : null,
       fecha,
       hora: hora || null,
       ubicacion: {

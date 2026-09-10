@@ -53,7 +53,6 @@ function generarConsejo(datos, categoria) {
   if (categoria === 'precaucion') {
     return 'Podría llover: lleva un paraguas o ten un plan B bajo techo.';
   }
-  // Clima "buena": la sugerencia depende de que tan caluroso estara el dia.
   if (datos.temperaturaMax >= 32) {
     return 'Hará bastante calor: usa protector solar, gorra y lleva agua.';
   }
@@ -67,9 +66,46 @@ function generarConsejo(datos, categoria) {
 }
 
 // -----------------------------------------------------------------------
+// Selector de hora amigable: opciones cada 30 minutos, agrupadas y en
+// formato de 12 horas, pero el valor guardado sigue siendo "HH:MM" (24h)
+// para no cambiar nada del backend.
+// -----------------------------------------------------------------------
+const GRUPOS_HORA = [
+  { etiqueta: 'Mañana', desdeMin: 6 * 60, hastaMin: 11 * 60 + 30 },
+  { etiqueta: 'Tarde', desdeMin: 12 * 60, hastaMin: 17 * 60 + 30 },
+  { etiqueta: 'Noche', desdeMin: 18 * 60, hastaMin: 23 * 60 + 30 },
+  { etiqueta: 'Madrugada', desdeMin: 0, hastaMin: 5 * 60 + 30 }
+];
+
+function formatearHora12h(horas, minutos) {
+  const periodo = horas < 12 ? 'a.m.' : 'p.m.';
+  let horas12 = horas % 12;
+  if (horas12 === 0) horas12 = 12;
+  return `${horas12}:${String(minutos).padStart(2, '0')} ${periodo}`;
+}
+
+function poblarSelectHora(select) {
+  const partes = ['<option value="">Sin hora específica</option>'];
+  GRUPOS_HORA.forEach((grupo) => {
+    let opciones = '';
+    for (let min = grupo.desdeMin; min <= grupo.hastaMin; min += 30) {
+      const h = Math.floor(min / 60);
+      const m = min % 60;
+      const valor = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      opciones += `<option value="${valor}">${formatearHora12h(h, m)}</option>`;
+    }
+    partes.push(`<optgroup label="${grupo.etiqueta}">${opciones}</optgroup>`);
+  });
+  select.innerHTML = partes.join('');
+}
+
+// -----------------------------------------------------------------------
 // Estado
 // -----------------------------------------------------------------------
 let tiposCita = [];
+let personas = [];
+let relacionesSugeridas = [];
+let editandoPersonaId = null;
 let modoUbicacionActivo = 'buscar';
 let ubicacionSeleccionada = null; // { nombre, lat, lon }
 let lugaresSugeridos = [];
@@ -84,16 +120,29 @@ const elPuertaMensaje = document.getElementById('puerta-mensaje');
 const elContenidoApp = document.getElementById('contenido-app');
 const elMensajePago = document.getElementById('mensaje-pago');
 
-const inputTextoIdea = document.getElementById('texto-idea');
-const btnAnalizar = document.getElementById('btn-analizar');
-const mensajeAnalisis = document.getElementById('mensaje-analisis');
+// Formulario de personas
+const formPersona = document.getElementById('form-persona');
+const inputPersonaNombre = document.getElementById('persona-nombre');
+const selectPersonaRelacion = document.getElementById('persona-relacion');
+const inputPersonaRelacionOtra = document.getElementById('persona-relacion-otra');
+const inputPersonaCumpleanos = document.getElementById('persona-cumpleanos');
+const inputPersonaComida = document.getElementById('persona-comida');
+const textareaPersonaNotas = document.getElementById('persona-notas');
+const mensajePersona = document.getElementById('mensaje-persona');
+const btnGuardarPersona = document.getElementById('btn-guardar-persona');
+const btnCancelarEdicionPersona = document.getElementById('btn-cancelar-edicion-persona');
+const cargandoPersonas = document.getElementById('cargando-personas');
+const listaPersonasEl = document.getElementById('lista-personas');
+const sinPersonas = document.getElementById('sin-personas');
 
+// Formulario de citas
 const formCita = document.getElementById('form-cita');
 const inputTitulo = document.getElementById('cita-titulo');
 const selectTipo = document.getElementById('cita-tipo');
-const inputConQuien = document.getElementById('cita-con-quien');
+const selectPersona = document.getElementById('cita-persona');
+const btnIrAPersonas = document.getElementById('btn-ir-a-personas');
 const inputFecha = document.getElementById('cita-fecha');
-const inputHora = document.getElementById('cita-hora');
+const selectHora = document.getElementById('cita-hora');
 
 const tabsUbicacion = document.querySelectorAll('.tab-ubicacion');
 const modoBuscar = document.getElementById('modo-buscar');
@@ -176,43 +225,174 @@ async function cargarTiposCita() {
   }
 }
 
-function etiquetaTipo(id) {
-  const tipo = tiposCita.find((t) => t.id === id);
-  return tipo ? tipo.etiqueta : 'Plan';
+// -----------------------------------------------------------------------
+// Personas (perfiles): catalogo de relaciones + CRUD
+// -----------------------------------------------------------------------
+async function cargarRelaciones() {
+  try {
+    const data = await llamarApi('/api/relaciones');
+    relacionesSugeridas = data.relaciones;
+  } catch (err) {
+    relacionesSugeridas = [];
+  }
+  selectPersonaRelacion.innerHTML =
+    relacionesSugeridas.map((r) => `<option value="${escaparHtml(r)}">${escaparHtml(r)}</option>`).join('') +
+    '<option value="__otra__">Otra…</option>';
 }
 
-// -----------------------------------------------------------------------
-// Analizar idea libre
-// -----------------------------------------------------------------------
-btnAnalizar.addEventListener('click', async () => {
-  ocultarMensaje(mensajeAnalisis);
-  const texto = inputTextoIdea.value.trim();
-  if (texto.length < 4) {
-    mostrarMensaje(mensajeAnalisis, 'Escribe una frase un poco más larga para poder analizarla.');
-    return;
+selectPersonaRelacion.addEventListener('change', () => {
+  const esOtra = selectPersonaRelacion.value === '__otra__';
+  inputPersonaRelacionOtra.classList.toggle('oculto', !esOtra);
+  if (esOtra) inputPersonaRelacionOtra.focus();
+});
+
+function poblarSelectPersonaCita() {
+  const valorPrevio = selectPersona.value;
+  selectPersona.innerHTML =
+    '<option value="">Nadie en particular</option>' +
+    personas.map((p) => `<option value="${p.id}">${escaparHtml(p.nombre)} (${escaparHtml(p.relacion)})</option>`).join('');
+  if (personas.some((p) => p.id === valorPrevio)) {
+    selectPersona.value = valorPrevio;
   }
+}
+
+function formatearCumpleanos(cumpleanos) {
+  if (!cumpleanos) return null;
+  const fecha = new Date(`${cumpleanos}T00:00:00`);
+  return fecha.toLocaleDateString('es', { day: 'numeric', month: 'long' });
+}
+
+function renderizarListaPersonas() {
+  listaPersonasEl.innerHTML = '';
+  sinPersonas.classList.toggle('oculto', personas.length > 0);
+
+  personas.forEach((persona) => {
+    const card = document.createElement('div');
+    card.className = 'persona-card';
+    const cumpleanosTexto = formatearCumpleanos(persona.cumpleanos);
+    card.innerHTML = `
+      <div class="persona-header">
+        <h4>${escaparHtml(persona.nombre)}</h4>
+        <span class="persona-relacion">${escaparHtml(persona.relacion)}</span>
+      </div>
+      ${cumpleanosTexto ? `<div class="persona-dato">🎂 ${cumpleanosTexto}</div>` : ''}
+      ${persona.comidaFavorita ? `<div class="persona-dato">🍽️ ${escaparHtml(persona.comidaFavorita)}</div>` : ''}
+      ${persona.notas ? `<div class="persona-dato persona-notas">${escaparHtml(persona.notas)}</div>` : ''}
+      <div class="persona-acciones">
+        <button type="button" class="btn-terciario boton-editar">Editar</button>
+        <button type="button" class="btn-eliminar boton-eliminar">Eliminar</button>
+      </div>
+    `;
+    card.querySelector('.boton-editar').addEventListener('click', () => iniciarEdicionPersona(persona));
+    card.querySelector('.boton-eliminar').addEventListener('click', () => eliminarPersona(persona.id));
+    listaPersonasEl.appendChild(card);
+  });
+}
+
+async function cargarPersonas() {
+  cargandoPersonas.classList.remove('oculto');
+  try {
+    const data = await llamarApi('/api/personas');
+    personas = data.personas;
+    cargandoPersonas.classList.add('oculto');
+    renderizarListaPersonas();
+    poblarSelectPersonaCita();
+  } catch (err) {
+    cargandoPersonas.classList.add('oculto');
+  }
+}
+
+function iniciarEdicionPersona(persona) {
+  editandoPersonaId = persona.id;
+  inputPersonaNombre.value = persona.nombre;
+
+  if (relacionesSugeridas.includes(persona.relacion)) {
+    selectPersonaRelacion.value = persona.relacion;
+    inputPersonaRelacionOtra.classList.add('oculto');
+    inputPersonaRelacionOtra.value = '';
+  } else {
+    selectPersonaRelacion.value = '__otra__';
+    inputPersonaRelacionOtra.classList.remove('oculto');
+    inputPersonaRelacionOtra.value = persona.relacion;
+  }
+
+  inputPersonaCumpleanos.value = persona.cumpleanos || '';
+  inputPersonaComida.value = persona.comidaFavorita || '';
+  textareaPersonaNotas.value = persona.notas || '';
+
+  btnGuardarPersona.textContent = 'Guardar cambios';
+  btnCancelarEdicionPersona.classList.remove('oculto');
+  formPersona.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+btnCancelarEdicionPersona.addEventListener('click', () => {
+  editandoPersonaId = null;
+  formPersona.reset();
+  inputPersonaRelacionOtra.classList.add('oculto');
+  btnGuardarPersona.textContent = 'Guardar persona';
+  btnCancelarEdicionPersona.classList.add('oculto');
+  ocultarMensaje(mensajePersona);
+});
+
+formPersona.addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  ocultarMensaje(mensajePersona);
+
+  const nombre = inputPersonaNombre.value.trim();
+  const relacion = selectPersonaRelacion.value === '__otra__'
+    ? inputPersonaRelacionOtra.value.trim()
+    : selectPersonaRelacion.value;
+  const cumpleanos = inputPersonaCumpleanos.value || null;
+  const comidaFavorita = inputPersonaComida.value.trim() || null;
+  const notas = textareaPersonaNotas.value.trim() || null;
+
+  if (nombre.length < 2) { mostrarMensaje(mensajePersona, 'El nombre debe tener al menos 2 caracteres.'); return; }
+  if (!relacion || relacion.length < 2) { mostrarMensaje(mensajePersona, 'Indica la relación (o escribe la tuya).'); return; }
+
+  const payload = { nombre, relacion, cumpleanos, comidaFavorita, notas };
 
   try {
-    const resultado = await llamarApi('/api/analizar-texto', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texto })
-    });
-
-    inputTitulo.value = resultado.titulo || '';
-    if (resultado.tipo) selectTipo.value = resultado.tipo;
-    inputConQuien.value = resultado.conQuien || '';
-    if (resultado.fecha) inputFecha.value = resultado.fecha;
-    if (resultado.hora) inputHora.value = resultado.hora;
-
-    if (resultado.advertencia) {
-      mostrarMensaje(mensajeAnalisis, resultado.advertencia);
+    if (editandoPersonaId) {
+      await llamarApi(`/api/personas/${editandoPersonaId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
     } else {
-      mostrarMensaje(mensajeAnalisis, 'Listo, revisa los detalles abajo y ajusta lo que quieras.', 'info');
+      await llamarApi('/api/personas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
     }
+
+    editandoPersonaId = null;
+    formPersona.reset();
+    inputPersonaRelacionOtra.classList.add('oculto');
+    btnGuardarPersona.textContent = 'Guardar persona';
+    btnCancelarEdicionPersona.classList.add('oculto');
+
+    await cargarPersonas();
+    cargarCitas(); // por si el cambio afecta como se ven citas ya listadas
   } catch (err) {
-    mostrarMensaje(mensajeAnalisis, err.message);
+    mostrarMensaje(mensajePersona, err.message);
   }
+});
+
+async function eliminarPersona(id) {
+  ocultarMensaje(mensajePersona);
+  try {
+    await llamarApi(`/api/personas/${id}`, { method: 'DELETE' });
+    await cargarPersonas();
+    cargarCitas();
+  } catch (err) {
+    mostrarMensaje(mensajePersona, err.message);
+  }
+}
+
+btnIrAPersonas.addEventListener('click', () => {
+  formPersona.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  inputPersonaNombre.focus();
 });
 
 // -----------------------------------------------------------------------
@@ -232,7 +412,6 @@ function fijarUbicacion(ubicacion) {
   ubicacionSeleccionada = ubicacion;
   elUbicacionSeleccionada.textContent = `Ubicación: ${ubicacion.nombre}`;
   elUbicacionSeleccionada.classList.remove('oculto');
-  // Una nueva ubicacion invalida las sugerencias anteriores.
   lugaresSugeridos = [];
   lugarElegido = null;
   listaLugares.innerHTML = '';
@@ -346,11 +525,10 @@ formCita.addEventListener('submit', async (evento) => {
 
   const titulo = inputTitulo.value.trim();
   const tipo = selectTipo.value;
-  const conQuien = inputConQuien.value.trim();
+  const personaId = selectPersona.value || null;
   const fecha = inputFecha.value;
-  const hora = inputHora.value || null;
+  const hora = selectHora.value || null;
 
-  if (titulo.length < 2) { mostrarMensaje(elMensajeForm, 'El título debe tener al menos 2 caracteres.'); return; }
   if (!fecha) { mostrarMensaje(elMensajeForm, 'Debes elegir una fecha para el plan.'); return; }
   if (!ubicacionSeleccionada) { mostrarMensaje(elMensajeForm, 'Elige una ubicación general para el plan.'); return; }
 
@@ -359,15 +537,15 @@ formCita.addEventListener('submit', async (evento) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        titulo, tipo, conQuien: conQuien || null, fecha, hora,
+        titulo: titulo || null, tipo, personaId, fecha, hora,
         ubicacion: ubicacionSeleccionada,
         lugarSugerido: lugarElegido
       })
     });
 
     formCita.reset();
-    inputTextoIdea.value = '';
-    ocultarMensaje(mensajeAnalisis);
+    poblarSelectHora(selectHora);
+    poblarSelectPersonaCita();
     ubicacionSeleccionada = null;
     lugaresSugeridos = [];
     lugarElegido = null;
@@ -409,7 +587,19 @@ async function cargarCitas() {
 function formatearFechaHora(cita) {
   const fecha = new Date(`${cita.fecha}T00:00:00`);
   const fechaTexto = fecha.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
-  return cita.hora ? `${fechaTexto} · ${cita.hora}` : fechaTexto;
+  if (!cita.hora) return fechaTexto;
+  const [h, m] = cita.hora.split(':').map(Number);
+  return `${fechaTexto} · ${formatearHora12h(h, m)}`;
+}
+
+function buscarPersonaPorId(id) {
+  return personas.find((p) => p.id === id) || null;
+}
+
+/** Compara solo mes y dia (ignora el año) entre el cumpleanos y la fecha de la cita. */
+function esCumpleanos(persona, fecha) {
+  if (!persona || !persona.cumpleanos) return false;
+  return persona.cumpleanos.slice(5) === fecha.slice(5);
 }
 
 function renderizarCita(cita) {
@@ -422,6 +612,12 @@ function renderizarCita(cita) {
     ? `<a href="${cita.lugarSugerido.enlaceMapa}" target="_blank" rel="noopener">${escaparHtml(lugar.nombre)}</a>`
     : escaparHtml(lugar.nombre);
 
+  const persona = cita.personaId ? buscarPersonaPorId(cita.personaId) : null;
+  const conQuienTexto = cita.personaId
+    ? ` · con ${persona ? escaparHtml(persona.nombre) : 'alguien (perfil eliminado)'}`
+    : '';
+  const esSuCumpleanos = esCumpleanos(persona, cita.fecha);
+
   card.innerHTML = `
     <div class="cita-header">
       <div class="cita-titulo-linea">
@@ -430,7 +626,8 @@ function renderizarCita(cita) {
       </div>
       <button class="btn-eliminar" data-id="${cita.id}">Eliminar</button>
     </div>
-    <div class="cita-meta">${formatearFechaHora(cita)}${cita.conQuien ? ` · con ${escaparHtml(cita.conQuien)}` : ''}</div>
+    <div class="cita-meta">${formatearFechaHora(cita)}${conQuienTexto}</div>
+    ${esSuCumpleanos ? `<div class="cita-cumpleanos">🎂 ¡Es el cumpleaños de ${escaparHtml(persona.nombre)}!</div>` : ''}
     <div class="cita-lugar">${enlaceLugar}</div>
     <div class="cita-clima" data-clima-id="${cita.id}">Cargando clima...</div>
   `;
@@ -564,8 +761,7 @@ async function cerrarSesion() {
   try {
     await fetch('/auth/logout', { method: 'POST' });
   } catch (err) {
-    // Aunque falle la llamada, igual mostramos la puerta de login:
-    // en el peor caso, la sesion sigue activa hasta que expire sola.
+    // Aunque falle la llamada, igual mostramos la puerta de login.
   }
   elCuenta.innerHTML = '';
   mostrarPuertaLogin();
@@ -573,11 +769,13 @@ async function cerrarSesion() {
 
 async function iniciar() {
   revisarResultadoDePago();
+  poblarSelectHora(selectHora);
+
   try {
     const data = await fetch('/api/usuario-actual').then((r) => r.json());
     if (data.usuario) {
       mostrarApp(data.usuario);
-      cargarTiposCita();
+      await Promise.all([cargarTiposCita(), cargarRelaciones(), cargarPersonas()]);
       cargarCitas();
     } else if (!data.loginConfigurado) {
       mostrarPuertaLogin('El inicio de sesión con Google todavía no está configurado en este servidor.');
