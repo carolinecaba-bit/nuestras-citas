@@ -9,6 +9,7 @@ const { TIPOS_CITA, obtenerTipoPorId } = require('./analizador');
 const { buscarLugares, ErrorServicioLugares } = require('./lugares');
 const usuarios = require('./usuarios');
 const personas = require('./personas');
+const tops = require('./tops');
 const auth = require('./auth');
 const pagos = require('./pagos');
 
@@ -271,7 +272,7 @@ app.get('/api/relaciones', (_req, res) => {
 
 function validarPersona(body) {
   const errores = [];
-  const { nombre, relacion, cumpleanos, comidaFavorita, notas } = body || {};
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas } = body || {};
 
   if (!nombre || typeof nombre !== 'string' || nombre.trim().length < 2) {
     errores.push('El nombre debe tener al menos 2 caracteres.');
@@ -284,6 +285,9 @@ function validarPersona(body) {
   }
   if (comidaFavorita !== undefined && comidaFavorita !== null && typeof comidaFavorita !== 'string') {
     errores.push('La comida favorita no es válida.');
+  }
+  if (correo && (typeof correo !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo.trim()))) {
+    errores.push('El correo no tiene un formato válido.');
   }
   if (notas !== undefined && notas !== null && typeof notas !== 'string') {
     errores.push('Las notas no son válidas.');
@@ -313,7 +317,7 @@ app.post('/api/personas', auth.requiereSesion, async (req, res) => {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
   }
 
-  const { nombre, relacion, cumpleanos, comidaFavorita, notas } = req.body;
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas } = req.body;
 
   try {
     const nuevaPersona = await personas.crearPersona({
@@ -322,6 +326,7 @@ app.post('/api/personas', auth.requiereSesion, async (req, res) => {
       relacion: relacion.trim(),
       cumpleanos: cumpleanos || null,
       comidaFavorita: comidaFavorita ? comidaFavorita.trim() : null,
+      correo: correo ? correo.trim() : null,
       notas: notas ? notas.trim() : null
     });
     res.status(201).json({ persona: nuevaPersona });
@@ -339,7 +344,7 @@ app.put('/api/personas/:id', auth.requiereSesion, async (req, res) => {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
   }
 
-  const { nombre, relacion, cumpleanos, comidaFavorita, notas } = req.body;
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas } = req.body;
 
   try {
     const actualizada = await personas.actualizarPersona(req.params.id, req.session.usuarioId, {
@@ -347,6 +352,7 @@ app.put('/api/personas/:id', auth.requiereSesion, async (req, res) => {
       relacion: relacion.trim(),
       cumpleanos: cumpleanos || null,
       comidaFavorita: comidaFavorita ? comidaFavorita.trim() : null,
+      correo: correo ? correo.trim() : null,
       notas: notas ? notas.trim() : null
     });
     if (!actualizada) {
@@ -591,6 +597,39 @@ app.post('/api/crear-pago', auth.requiereSesion, async (req, res) => {
     res.json({ url: urlCheckout });
   } catch (err) {
     manejarError(err, res, 'creacion de pago');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/tops-categorias  — catalogo de categorias de "ideas y que hacer"
+// ---------------------------------------------------------------------------
+app.get('/api/tops-categorias', (_req, res) => {
+  res.json({
+    categorias: tops.CATEGORIAS.map((c) => ({ id: c.id, etiqueta: c.etiqueta }))
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/tops/:categoriaId  — ideas curadas de blogs para una categoria
+// ---------------------------------------------------------------------------
+app.get('/api/tops/:categoriaId', auth.requiereSesion, async (req, res) => {
+  const categoria = tops.obtenerCategoriaPorId(req.params.categoriaId);
+  if (!categoria) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'La categoría no es válida.' });
+  }
+
+  try {
+    const resultado = await tops.obtenerTops(categoria.id);
+    res.json(resultado);
+  } catch (err) {
+    if (err instanceof tops.ErrorServicioTops) {
+      console.error(`[tops] Fallo al obtener categoria=${categoria.id}:`, err.message);
+      return res.status(502).json({
+        error: 'error_servicio_externo',
+        mensaje: `No se pudieron obtener ideas para esta categoría (${err.message}). Intenta de nuevo en un momento.`
+      });
+    }
+    manejarError(err, res, 'busqueda de tops');
   }
 });
 

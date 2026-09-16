@@ -127,6 +127,7 @@ const selectPersonaRelacion = document.getElementById('persona-relacion');
 const inputPersonaRelacionOtra = document.getElementById('persona-relacion-otra');
 const inputPersonaCumpleanos = document.getElementById('persona-cumpleanos');
 const inputPersonaComida = document.getElementById('persona-comida');
+const inputPersonaCorreo = document.getElementById('persona-correo');
 const textareaPersonaNotas = document.getElementById('persona-notas');
 const mensajePersona = document.getElementById('mensaje-persona');
 const btnGuardarPersona = document.getElementById('btn-guardar-persona');
@@ -277,6 +278,7 @@ function renderizarListaPersonas() {
       </div>
       ${cumpleanosTexto ? `<div class="persona-dato">🎂 ${cumpleanosTexto}</div>` : ''}
       ${persona.comidaFavorita ? `<div class="persona-dato">🍽️ ${escaparHtml(persona.comidaFavorita)}</div>` : ''}
+      ${persona.correo ? `<div class="persona-dato">✉️ ${escaparHtml(persona.correo)}</div>` : ''}
       ${persona.notas ? `<div class="persona-dato persona-notas">${escaparHtml(persona.notas)}</div>` : ''}
       <div class="persona-acciones">
         <button type="button" class="btn-terciario boton-editar">Editar</button>
@@ -318,6 +320,7 @@ function iniciarEdicionPersona(persona) {
 
   inputPersonaCumpleanos.value = persona.cumpleanos || '';
   inputPersonaComida.value = persona.comidaFavorita || '';
+  inputPersonaCorreo.value = persona.correo || '';
   textareaPersonaNotas.value = persona.notas || '';
 
   btnGuardarPersona.textContent = 'Guardar cambios';
@@ -344,12 +347,14 @@ formPersona.addEventListener('submit', async (evento) => {
     : selectPersonaRelacion.value;
   const cumpleanos = inputPersonaCumpleanos.value || null;
   const comidaFavorita = inputPersonaComida.value.trim() || null;
+  const correo = inputPersonaCorreo.value.trim() || null;
   const notas = textareaPersonaNotas.value.trim() || null;
 
   if (nombre.length < 2) { mostrarMensaje(mensajePersona, 'El nombre debe tener al menos 2 caracteres.'); return; }
   if (!relacion || relacion.length < 2) { mostrarMensaje(mensajePersona, 'Indica la relación (o escribe la tuya).'); return; }
+  if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mostrarMensaje(mensajePersona, 'El correo no tiene un formato válido.'); return; }
 
-  const payload = { nombre, relacion, cumpleanos, comidaFavorita, notas };
+  const payload = { nombre, relacion, cumpleanos, comidaFavorita, correo, notas };
 
   try {
     if (editandoPersonaId) {
@@ -617,6 +622,7 @@ function renderizarCita(cita) {
     ? ` · con ${persona ? escaparHtml(persona.nombre) : 'alguien (perfil eliminado)'}`
     : '';
   const esSuCumpleanos = esCumpleanos(persona, cita.fecha);
+  const enlaceCalendario = generarUrlGoogleCalendar(cita, persona);
 
   card.innerHTML = `
     <div class="cita-header">
@@ -629,6 +635,7 @@ function renderizarCita(cita) {
     <div class="cita-meta">${formatearFechaHora(cita)}${conQuienTexto}</div>
     ${esSuCumpleanos ? `<div class="cita-cumpleanos">🎂 ¡Es el cumpleaños de ${escaparHtml(persona.nombre)}!</div>` : ''}
     <div class="cita-lugar">${enlaceLugar}</div>
+    <a class="cita-calendario" href="${enlaceCalendario}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
     <div class="cita-clima" data-clima-id="${cita.id}">Cargando clima...</div>
   `;
 
@@ -691,6 +698,136 @@ async function eliminarCita(id) {
   } catch (err) {
     mostrarMensaje(elMensajeLista, err.message);
   }
+}
+
+// -----------------------------------------------------------------------
+// Ideas y que hacer (tops curados de blogs, via SerpApi en el backend)
+// -----------------------------------------------------------------------
+let tabActivaTops = null;
+
+const elTabsTops = document.getElementById('tabs-tops');
+const elTopsActualizado = document.getElementById('tops-actualizado');
+const elTopsCargando = document.getElementById('tops-cargando');
+const elTopsMensaje = document.getElementById('tops-mensaje');
+const elListaTops = document.getElementById('lista-tops');
+
+async function cargarCategoriasTops() {
+  try {
+    const data = await llamarApi('/api/tops-categorias');
+    renderizarTabsTops(data.categorias);
+    if (data.categorias.length > 0) {
+      seleccionarTabTops(data.categorias[0].id);
+    }
+  } catch (err) {
+    // Si falla, la seccion simplemente queda vacia; no interrumpe el resto de la app.
+  }
+}
+
+function renderizarTabsTops(categorias) {
+  elTabsTops.innerHTML = categorias
+    .map((c) => `<button type="button" class="tab-top" data-id="${c.id}">${escaparHtml(c.etiqueta)}</button>`)
+    .join('');
+  elTabsTops.querySelectorAll('.tab-top').forEach((boton) => {
+    boton.addEventListener('click', () => seleccionarTabTops(boton.dataset.id));
+  });
+}
+
+function seleccionarTabTops(categoriaId) {
+  tabActivaTops = categoriaId;
+  elTabsTops.querySelectorAll('.tab-top').forEach((boton) => {
+    boton.classList.toggle('activo', boton.dataset.id === categoriaId);
+  });
+  cargarTops(categoriaId);
+}
+
+async function cargarTops(categoriaId) {
+  ocultarMensaje(elTopsMensaje);
+  elTopsActualizado.classList.add('oculto');
+  elListaTops.innerHTML = '';
+  elTopsCargando.classList.remove('oculto');
+
+  try {
+    const data = await llamarApi(`/api/tops/${categoriaId}`);
+    elTopsCargando.classList.add('oculto');
+
+    if (!data.resultados || data.resultados.length === 0) {
+      mostrarMensaje(elTopsMensaje, 'No encontré ideas para esta categoría en este momento.', 'info');
+      return;
+    }
+
+    if (data.actualizadoEn) {
+      const fecha = new Date(data.actualizadoEn);
+      const fechaTexto = fecha.toLocaleDateString('es', { day: 'numeric', month: 'long' });
+      elTopsActualizado.textContent = `Actualizado el ${fechaTexto}`;
+      elTopsActualizado.classList.remove('oculto');
+    }
+
+    elListaTops.innerHTML = data.resultados
+      .map(
+        (r) => `
+      <article class="top-card">
+        <h4>${escaparHtml(r.titulo)}</h4>
+        ${r.resumen ? `<p class="top-resumen">${escaparHtml(r.resumen)}</p>` : ''}
+        <div class="top-pie">
+          <span class="top-fuente">${escaparHtml(r.fuente)}</span>
+          <a href="${r.enlace}" target="_blank" rel="noopener">Leer más</a>
+        </div>
+      </article>
+    `
+      )
+      .join('');
+  } catch (err) {
+    elTopsCargando.classList.add('oculto');
+    mostrarMensaje(elTopsMensaje, err.message);
+  }
+}
+
+/** Rellena con ceros a la izquierda (ej: 5 -> "05"). */
+function conCero(n) { return String(n).padStart(2, '0'); }
+
+/**
+ * Genera el rango de fechas en el formato que espera Google Calendar.
+ * Sin hora: evento de "todo el dia" (fin = dia siguiente, como pide Google).
+ * Con hora: bloque de 1 hora de duracion por defecto.
+ */
+function formatearRangoGoogleCalendar(fecha, hora) {
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+
+  if (!hora) {
+    const inicio = new Date(anio, mes - 1, dia);
+    const fin = new Date(anio, mes - 1, dia + 1);
+    const formatoDia = (d) => `${d.getFullYear()}${conCero(d.getMonth() + 1)}${conCero(d.getDate())}`;
+    return `${formatoDia(inicio)}/${formatoDia(fin)}`;
+  }
+
+  const [h, m] = hora.split(':').map(Number);
+  const inicio = new Date(anio, mes - 1, dia, h, m);
+  const fin = new Date(inicio.getTime() + 60 * 60 * 1000);
+  const formatoHora = (d) =>
+    `${d.getFullYear()}${conCero(d.getMonth() + 1)}${conCero(d.getDate())}T${conCero(d.getHours())}${conCero(d.getMinutes())}00`;
+  return `${formatoHora(inicio)}/${formatoHora(fin)}`;
+}
+
+/**
+ * Arma la URL de "crear evento" de Google Calendar, prellenada con los
+ * datos de la cita. Nunca crea el evento por si sola: solo abre el
+ * formulario de Google para que la persona confirme y guarde.
+ */
+function generarUrlGoogleCalendar(cita, persona) {
+  const url = new URL('https://calendar.google.com/calendar/render');
+  url.searchParams.set('action', 'TEMPLATE');
+  url.searchParams.set('text', cita.titulo);
+  url.searchParams.set('dates', formatearRangoGoogleCalendar(cita.fecha, cita.hora));
+
+  const lugar = cita.lugarSugerido || cita.ubicacion;
+  if (lugar && lugar.nombre) {
+    url.searchParams.set('location', lugar.nombre);
+  }
+  if (persona && persona.correo) {
+    url.searchParams.set('add', persona.correo);
+  }
+
+  return url.toString();
 }
 
 // -----------------------------------------------------------------------
@@ -775,7 +912,7 @@ async function iniciar() {
     const data = await fetch('/api/usuario-actual').then((r) => r.json());
     if (data.usuario) {
       mostrarApp(data.usuario);
-      await Promise.all([cargarTiposCita(), cargarRelaciones(), cargarPersonas()]);
+      await Promise.all([cargarTiposCita(), cargarRelaciones(), cargarPersonas(), cargarCategoriasTops()]);
       cargarCitas();
     } else if (!data.loginConfigurado) {
       mostrarPuertaLogin('El inicio de sesión con Google todavía no está configurado en este servidor.');

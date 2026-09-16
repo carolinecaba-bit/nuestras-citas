@@ -1,12 +1,12 @@
 :root {
-  --fondo: #FBF3F1;
+  --fondo: #F2F5FB;
   --superficie: #FFFFFF;
-  --texto: #3B2130;
-  --texto-suave: #8B6B78;
-  --acento: #A8395A;
-  --acento-oscuro: #7E2C46;
+  --texto: #2A2F52;
+  --texto-suave: #6E7699;
+  --acento: #4C56A6;
+  --acento-oscuro: #383F80;
   --dorado: #C9A15A;
-  --borde: #EFDCD8;
+  --borde: #DCE1F0;
   --bien: #5F8A6E;
   --bien-fondo: #EFF5F1;
   --precaucion: #C98A3B;
@@ -184,7 +184,7 @@ h1, h2, h3 {
 .persona-relacion {
   font-size: 11px;
   color: var(--acento);
-  background: #FDF1F5;
+  background: #ECEFFA;
   border-radius: 999px;
   padding: 2px 8px;
   white-space: nowrap;
@@ -202,6 +202,83 @@ h1, h2, h3 {
   gap: 8px;
   margin-top: 10px;
 }
+
+/* ---------- Ideas y que hacer (tops) ---------- */
+
+.tabs-tops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.tab-top {
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+.tab-top.activo { background: var(--acento); border-color: var(--acento); color: white; }
+
+.tops-actualizado {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.lista-tops {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.top-card {
+  border: 1px solid var(--borde);
+  border-left: 4px solid var(--dorado);
+  border-radius: var(--radio-chico);
+  padding: 14px 16px;
+  background: var(--fondo);
+}
+
+.top-card h4 {
+  margin: 0 0 6px;
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.top-resumen {
+  font-size: 13px;
+  color: var(--texto-suave);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.top-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.top-fuente {
+  color: var(--texto-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-pie a {
+  color: var(--acento);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.top-pie a:hover { text-decoration: underline; }
 
 /* ---------- Formulario ---------- */
 
@@ -222,7 +299,7 @@ h1, h2, h3 {
   gap: 12px;
 }
 
-input[type="text"], input[type="number"], input[type="date"], input[type="time"], select, textarea {
+input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="email"], select, textarea {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--borde);
@@ -364,7 +441,7 @@ button { font-family: inherit; cursor: pointer; }
 .lugar-card.elegido {
   border-color: var(--acento);
   border-left-color: var(--acento);
-  background: #FDF1F5;
+  background: #ECEFFA;
 }
 
 .lugar-card h4 {
@@ -505,6 +582,20 @@ button { font-family: inherit; cursor: pointer; }
 }
 .cita-lugar a { color: var(--acento); text-decoration: none; }
 .cita-lugar a:hover { text-decoration: underline; }
+
+.cita-calendario {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--acento);
+  text-decoration: none;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.cita-calendario:hover { border-color: var(--acento); background: #ECEFFA; }
 
 .cita-clima {
   margin-top: 10px;

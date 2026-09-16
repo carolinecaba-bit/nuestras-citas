@@ -15,9 +15,9 @@ gratuitos y sin necesidad de API Key.
    (con la cuenta de Google que uses) los ves. No hay contraseñas que
    manejar ni guardar.
 2. **Tus personas**: guarda perfiles simples de con quién sales — nombre,
-   relación (novia, madre, amigo...), cumpleaños, comida favorita y notas
-   libres (alergias, gustos, tallas...). Se reutilizan al crear citas, sin
-   volver a escribir lo mismo cada vez.
+   relación (novia, madre, amigo...), cumpleaños, comida favorita, correo
+   (opcional) y notas libres (alergias, gustos, tallas...). Se reutilizan
+   al crear citas, sin volver a escribir lo mismo cada vez.
 3. **Detalles del plan directos**: eliges tipo de plan, fecha y hora desde
    el primer momento. La hora se elige con un selector agrupado
    (Mañana/Tarde/Noche) en formato de 12 horas, en vez del reloj nativo
@@ -47,6 +47,21 @@ gratuitos y sin necesidad de API Key.
     completa, Stripe le avisa a la app mediante un **webhook** (verificado
     con firma), que registra el evento y envía un correo de agradecimiento
     — todo sin bloquear la respuesta al usuario ni a Stripe.
+11. **Ideas y qué hacer**: una sección con categorías curadas ("ideas de
+    primera cita", "planes económicos", "qué hacer en días nublados"...)
+    que trae resultados reales de blogs mediante una búsqueda en vivo
+    (vía [SerpApi](https://serpapi.com)). Solo se muestra título, un
+    resumen corto y la fuente, con un botón "Leer más" que lleva al
+    artículo original — nunca se reproduce el contenido completo. Los
+    resultados se cachean por 24 horas para no gastar la cuota gratuita
+    de búsquedas en cada visita.
+12. **Agregar a Google Calendar**: cada cita tiene un botón que abre el
+    formulario de creación de evento de Google Calendar, ya lleno con el
+    título, fecha, hora (o "todo el día" si no especificaste una) y
+    lugar. Si la persona asociada tiene un correo guardado, aparece
+    precargada como invitada. El evento nunca se crea solo: siempre hay
+    que confirmarlo en Google Calendar. No requiere ningún permiso nuevo
+    de Google ni backend adicional.
 
 ## ¿Por qué un backend intermedio?
 
@@ -155,6 +170,27 @@ a la derecha, y en la pantalla de Stripe usa la tarjeta de prueba
 completar el pago, Stripe te regresa a la app con un aviso de éxito, y
 en unos segundos debería llegarte un correo de agradecimiento.
 
+## Configurar "Ideas y qué hacer" (SerpApi)
+
+Es opcional: sin esto, esa sección muestra un mensaje claro pidiendo
+configurarla, sin afectar el resto de la app.
+
+1. Crea una cuenta gratuita en [serpapi.com](https://serpapi.com). El
+   plan gratuito incluye **100 búsquedas al mes**, sin tarjeta de crédito.
+2. Ve a tu **Dashboard** → copia tu **API Key** (aparece directamente ahí).
+3. Pégala en tu `.env` (y en las Environment Variables de Render) como
+   `SERPAPI_API_KEY`.
+4. Opcional: `TOPS_CACHE_HORAS` controla cuántas horas se reutiliza un
+   resultado antes de volver a buscar (por defecto 24). Con 5 categorías
+   y una búsqueda por categoría al día, el uso normal se queda muy por
+   debajo del límite gratuito mensual.
+
+> **Nota sobre Render Free:** si el servicio se reinicia o "despierta"
+> tras estar dormido, el caché en disco puede perderse (ver "Límites
+> conocidos" más abajo), lo que puede generar alguna búsqueda extra de
+> más. Para un uso personal esto no debería acercarse al límite mensual,
+> pero si notas que se agota, revisa tu consumo en el Dashboard de SerpApi.
+
 ## Instalación
 
 ```bash
@@ -175,6 +211,8 @@ RESEND_API_KEY=
 CORREO_REMITENTE=Nuestras citas <onboarding@resend.dev>
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
+SERPAPI_API_KEY=
+TOPS_CACHE_HORAS=24
 ```
 
 `SESSION_SECRET` puede generarse con `openssl rand -hex 32`. Si la dejas
@@ -201,6 +239,7 @@ nuestras-citas/
 ├── correo.js               # Correo de bienvenida via Resend (no bloquea el login)
 ├── pagos.js                # Stripe: crea la sesion de Checkout y maneja el webhook
 ├── eventosStripe.js         # Registro persistente de cada evento de webhook recibido
+├── tops.js                  # "Ideas y que hacer": busqueda en vivo via SerpApi + cache en disco
 ├── analizador.js           # Catalogo de tipos de plan (picnic, cena, etc.) y sus tags de OpenStreetMap
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
 ├── package.json
@@ -246,11 +285,14 @@ Crea un perfil. Cuerpo esperado:
   "relacion": "Novia",
   "cumpleanos": "1998-09-20",
   "comidaFavorita": "Pizza",
+  "correo": "ana@correo.com",
   "notas": "Alérgica al maní"
 }
 ```
 
-`cumpleanos`, `comidaFavorita` y `notas` son opcionales.
+`cumpleanos`, `comidaFavorita`, `correo` y `notas` son opcionales. Si se
+indica `correo`, se usa para invitarla automáticamente al agregar la
+cita a Google Calendar.
 
 ### `PUT /api/personas/:id`
 Edita un perfil (mismo cuerpo que crearlo), solo si es tuyo.
@@ -307,6 +349,15 @@ del evento, registra **todos** los eventos recibidos en
 envía un correo de agradecimiento al correo de quien pagó — sin esperar
 a que ese correo termine de enviarse antes de responderle a Stripe.
 
+### `GET /api/tops-categorias`
+Catálogo de categorías de "Ideas y qué hacer" disponibles.
+
+### `GET /api/tops/:categoriaId`
+Requiere sesión. Devuelve `{ resultados, actualizadoEn, deCache }` con
+hasta 5 ideas para esa categoría (título, resumen corto, fuente y
+enlace). Usa el caché en disco si tiene menos de `TOPS_CACHE_HORAS`; si
+no, busca en vivo con SerpApi y actualiza el caché.
+
 ## Manejo de errores
 
 - **Backend:** try/catch en cada llamada externa, `AbortController` para
@@ -341,6 +392,8 @@ a que ese correo termine de enviarse antes de responderle a Stripe.
 | `CORREO_REMITENTE`       | No          | Remitente del correo (por defecto, el de pruebas de Resend)          |
 | `STRIPE_SECRET_KEY`      | No          | Clave secreta de Stripe (modo prueba); sin ella, "Apoyar" da un aviso claro |
 | `STRIPE_WEBHOOK_SECRET`  | No          | Signing secret del endpoint de webhook en el Dashboard de Stripe     |
+| `SERPAPI_API_KEY`        | No          | API Key de SerpApi; sin ella, "Ideas y qué hacer" da un aviso claro  |
+| `TOPS_CACHE_HORAS`       | No          | Horas que se reutiliza un resultado antes de rebuscar (por defecto 24) |
 
 El archivo `.env` **no** debe subirse a control de versiones.
 
@@ -360,7 +413,10 @@ El archivo `.env` **no** debe subirse a control de versiones.
 - Las sesiones se guardan en memoria del proceso: se cierran todas si el
   servidor se reinicia. En hosts de plan gratuito (como Render Free) el
   disco también es efímero, así que `data/citas.json`, `data/personas.json`,
-  `data/usuarios.json` y `data/eventos-stripe.json` pueden reiniciarse a
-  vacío cuando el servicio se reinicia o "despierta" tras estar inactivo.
+  `data/usuarios.json`, `data/eventos-stripe.json` y `data/tops-cache.json`
+  pueden reiniciarse a vacío cuando el servicio se reinicia o "despierta"
+  tras estar inactivo (para "Ideas y qué hacer", esto puede provocar
+  alguna búsqueda de más de lo esperado contra la cuota gratuita de
+  SerpApi).
 - La comparación de fechas (pasado/futuro) usa la fecha del servidor, no
   la zona horaria del lugar de la cita.

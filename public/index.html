@@ -63,6 +63,9 @@
           </div>
         </div>
 
+        <label for="persona-correo">Correo (opcional, para invitarla a Google Calendar)</label>
+        <input type="email" id="persona-correo" placeholder="Ej: ana@correo.com" />
+
         <label for="persona-notas">Notas (opcional)</label>
         <textarea id="persona-notas" rows="2" placeholder="Alergias, gustos, tallas... lo que quieras recordar"></textarea>
 
@@ -159,6 +162,18 @@
       <div id="cargando-lista" class="cargando">Cargando citas...</div>
       <div id="linea-tiempo" class="linea-tiempo"></div>
       <p id="sin-citas" class="sin-citas oculto">Aún no tienes citas guardadas. Crea tu primer plan arriba.</p>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Ideas y qué hacer</h2>
+      <p class="tarjeta-subtitulo">Ideas de blogs reales, buscadas y actualizadas automáticamente.</p>
+
+      <div id="tabs-tops" class="tabs-tops"></div>
+
+      <div id="tops-actualizado" class="tops-actualizado oculto"></div>
+      <div id="tops-cargando" class="cargando oculto">Buscando ideas...</div>
+      <div id="tops-mensaje" class="mensaje oculto"></div>
+      <div id="lista-tops" class="lista-tops"></div>
     </section>
 
     </div>
