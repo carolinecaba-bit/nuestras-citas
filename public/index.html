@@ -106,7 +106,19 @@
         </div>
 
         <label for="cita-titulo">Título (opcional: se genera solo si lo dejas vacío)</label>
-        <input type="text" id="cita-titulo" placeholder="Ej: Picnic con Ana" />
+        <div class="fila">
+          <input type="text" id="cita-titulo" placeholder="Ej: Picnic con Ana" />
+          <button type="button" id="btn-sugerir-ia" class="btn-terciario" disabled>✨ Sugerir con IA</button>
+        </div>
+        <p class="ia-ayuda">Elige tipo de plan, fecha y ubicación para activar esto.</p>
+
+        <div id="ia-cargando" class="cargando oculto">Pensando una idea...</div>
+        <div id="ia-mensaje" class="mensaje oculto"></div>
+        <div id="ia-sugerencia" class="ia-sugerencia oculto">
+          <h4 id="ia-sugerencia-titulo"></h4>
+          <p id="ia-sugerencia-descripcion"></p>
+          <button type="button" id="btn-usar-sugerencia" class="btn-terciario">Usar este título</button>
+        </div>
 
         <label>Ubicación general</label>
         <div class="tabs-ubicacion" role="tablist">

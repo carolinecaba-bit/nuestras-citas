@@ -6,6 +6,8 @@
 // correo lento (o caido) nunca debe hacer mas lento ni fallar el login.
 // La API key vive solo en variables de entorno.
 // -----------------------------------------------------------------------
+const logger = require('./logger');
+
 const RESEND_URL = 'https://api.resend.com/emails';
 const TIMEOUT_MS = 8000;
 
@@ -64,6 +66,12 @@ function plantillaConfirmacionPago({ nombre, monto, moneda }) {
 async function enviarCorreoBienvenida(usuario) {
   if (!configurado()) {
     console.log('[correo] RESEND_API_KEY no configurada: se omite el correo de bienvenida.');
+    logger.warning({
+      actor: `usuario:${usuario.id}`,
+      funcion: 'enviarCorreoBienvenida',
+      input: { email: usuario.email },
+      mensaje: 'RESEND_API_KEY no configurada: se omite el correo'
+    });
     return;
   }
 
@@ -89,6 +97,13 @@ async function enviarCorreoBienvenida(usuario) {
   }
 
   console.log(`[correo] Correo de bienvenida enviado a ${usuario.email}`);
+  logger.info({
+    actor: `usuario:${usuario.id}`,
+    funcion: 'enviarCorreoBienvenida',
+    input: { email: usuario.email },
+    output: { enviado: true },
+    mensaje: 'Correo de bienvenida enviado'
+  });
 }
 
 /**
@@ -100,6 +115,12 @@ async function enviarCorreoBienvenida(usuario) {
 async function enviarCorreoConfirmacionPago({ nombre, email, monto, moneda }) {
   if (!configurado()) {
     console.log('[correo] RESEND_API_KEY no configurada: se omite el correo de confirmacion de pago.');
+    logger.warning({
+      actor: 'sistema',
+      funcion: 'enviarCorreoConfirmacionPago',
+      input: { email },
+      mensaje: 'RESEND_API_KEY no configurada: se omite el correo'
+    });
     return;
   }
 
@@ -125,6 +146,13 @@ async function enviarCorreoConfirmacionPago({ nombre, email, monto, moneda }) {
   }
 
   console.log(`[correo] Correo de confirmacion de pago enviado a ${email}`);
+  logger.info({
+    actor: 'sistema',
+    funcion: 'enviarCorreoConfirmacionPago',
+    input: { email, monto, moneda },
+    output: { enviado: true },
+    mensaje: 'Correo de confirmacion de pago enviado'
+  });
 }
 
 module.exports = { enviarCorreoBienvenida, enviarCorreoConfirmacionPago, configurado };

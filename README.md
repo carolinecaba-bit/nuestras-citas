@@ -62,6 +62,17 @@ gratuitos y sin necesidad de API Key.
     precargada como invitada. El evento nunca se crea solo: siempre hay
     que confirmarlo en Google Calendar. No requiere ningún permiso nuevo
     de Google ni backend adicional.
+13. **Sugerir plan con IA**: botón "✨ Sugerir con IA" en el formulario de
+    citas (se activa al elegir tipo, fecha y ubicación). Genera un título
+    y una breve idea personalizada usando los datos de la persona elegida
+    (si hay una), el clima del día y el lugar, vía [Groq](https://groq.com)
+    (gratis, formato estándar de OpenAI). La sugerencia nunca se guarda
+    sola: hay que hacer clic en "Usar este título" para aplicarla.
+14. **Registro de actividad (logs)**: cada petición a la app queda
+    registrada en `logs/AAAAMMDD.log` (un archivo por día) con fecha,
+    nivel (INFO/WARNING/ERROR), quién la hizo, en qué ruta ocurrió, qué se
+    envió y qué se respondió — útil para depurar sin tener que adivinar
+    qué pasó.
 
 ## ¿Por qué un backend intermedio?
 
@@ -191,6 +202,28 @@ configurarla, sin afectar el resto de la app.
 > más. Para un uso personal esto no debería acercarse al límite mensual,
 > pero si notas que se agota, revisa tu consumo en el Dashboard de SerpApi.
 
+## Configurar "Sugerir con IA" (Groq)
+
+Es opcional: sin esto, el botón de sugerencia muestra un mensaje claro
+pidiendo configurarlo, sin romper el resto del formulario.
+
+1. Crea una cuenta gratuita en [console.groq.com](https://console.groq.com).
+2. Ve a **API Keys** → **Create API Key**, y copia la clave generada.
+3. Pégala en tu `.env` como `GROQ_API_KEY`.
+4. El plan gratuito de Groq permite **30 peticiones por minuto y 1,000 al
+   día**, sin necesidad de tarjeta de crédito — de sobra para esta función.
+5. `GROQ_MODEL` y `GROQ_BASE_URL` son opcionales (ya tienen un valor por
+   defecto razonable). Si Groq descontinúa el modelo usado por defecto,
+   solo hay que cambiar `GROQ_MODEL` — nunca hace falta tocar el código.
+
+**Nota de seguridad**: los datos de la persona elegida (nombre, notas,
+comida favorita) se le envían a la IA siempre como *información*, nunca
+como *instrucciones* — el prompt del sistema le ordena explícitamente
+ignorar cualquier texto dentro de esos datos que intente darle una orden
+distinta. Además, la respuesta de la IA se valida estrictamente: solo se
+aceptan un título y una descripción dentro de un límite de caracteres;
+cualquier otra cosa se descarta.
+
 ## Instalación
 
 ```bash
@@ -240,11 +273,14 @@ nuestras-citas/
 ├── pagos.js                # Stripe: crea la sesion de Checkout y maneja el webhook
 ├── eventosStripe.js         # Registro persistente de cada evento de webhook recibido
 ├── tops.js                  # "Ideas y que hacer": busqueda en vivo via SerpApi + cache en disco
+├── ia.js                    # "Sugerir con IA": llama a Groq, valida la respuesta, registra tokens/duracion
+├── logger.js                # Logging estructurado: fecha, nivel, actor, funcion, input, output
 ├── analizador.js           # Catalogo de tipos de plan (picnic, cena, etc.) y sus tags de OpenStreetMap
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
 ├── package.json
 ├── .env.example
 ├── data/                   # Se crea automaticamente; guarda citas.json, personas.json y usuarios.json
+├── logs/                   # Se crea automaticamente; un archivo AAAAMMDD.log por dia
 ├── public/
 │   ├── index.html          # Puerta de login + perfiles + formulario + lista de citas
 │   ├── style.css             # Identidad visual (Fraunces + Karla, paleta rosa/dorado)
@@ -342,6 +378,14 @@ puede ser `"pronostico"`, `"historico"` o `"no_disponible"`.
 Requiere sesión. Crea una sesión de Stripe Checkout ($3 USD, "apoyo" al
 proyecto) y devuelve `{ url }` — el frontend redirige el navegador ahí.
 
+### `POST /api/sugerir-plan`
+Requiere sesión. Cuerpo: `{ tipo, personaId, fecha, ubicacion }`
+(`personaId` opcional). Devuelve `{ titulo, descripcion }` generados por
+IA a partir del tipo de plan, la persona (si se indicó), el clima de esa
+fecha/ubicación, y el lugar. Si `GROQ_API_KEY` no está configurada, o la
+IA falla o responde en un formato inválido, devuelve `502` con un
+mensaje claro — nunca una sugerencia a medias.
+
 ### `POST /webhooks/stripe`
 Recibido directamente por Stripe (no por el frontend). Verifica la firma
 del evento, registra **todos** los eventos recibidos en
@@ -371,12 +415,22 @@ no, busca en vivo con SerpApi y actualiza el caché.
   webhook de Stripe verifica la firma de cada evento antes de confiar en
   su contenido (rechaza con `400` cualquier payload sin firma válida, sin
   importar qué diga adentro), y responde `2xx` a Stripe de inmediato,
-  enviando el correo de agradecimiento por separado.
+  enviando el correo de agradecimiento por separado. La sugerencia de IA
+  distingue entre clave inválida (`401`), límite de peticiones alcanzado
+  (`429`), error del proveedor (`500`), tiempo agotado, y una respuesta
+  que no cumple el formato exigido — cada caso con su propio mensaje, y
+  nunca se muestra una sugerencia a medias o mal formada.
 - **Frontend:** cada fetch distingue error de red, respuesta no-JSON y
   error HTTP. Si la sesión expira a mitad de uso, la app vuelve a mostrar
   la puerta de login con un aviso, en vez de fallar en silencio. El clima
   de cada cita se carga de forma independiente, así que si uno falla las
   demás tarjetas no se ven afectadas.
+- **Registro (logs):** cada petición a `/api`, `/auth` y `/webhooks`
+  queda registrada automáticamente en `logs/AAAAMMDD.log` con fecha,
+  nivel, actor, función/ruta, input y output. Además, eventos que ocurren
+  *después* de responder (envío de correos, eventos de webhook, llamadas
+  a la IA) se registran aparte, con sus propios detalles (tokens y
+  duración en el caso de la IA).
 
 ## Variables de entorno
 
@@ -394,6 +448,9 @@ no, busca en vivo con SerpApi y actualiza el caché.
 | `STRIPE_WEBHOOK_SECRET`  | No          | Signing secret del endpoint de webhook en el Dashboard de Stripe     |
 | `SERPAPI_API_KEY`        | No          | API Key de SerpApi; sin ella, "Ideas y qué hacer" da un aviso claro  |
 | `TOPS_CACHE_HORAS`       | No          | Horas que se reutiliza un resultado antes de rebuscar (por defecto 24) |
+| `GROQ_API_KEY`           | No          | API Key de Groq; sin ella, "Sugerir con IA" da un aviso claro         |
+| `GROQ_MODEL`             | No          | Modelo a usar (por defecto `llama-3.1-8b-instant`)                    |
+| `GROQ_BASE_URL`          | No          | URL base de la API (por defecto `https://api.groq.com/openai/v1`)    |
 
 El archivo `.env` **no** debe subirse a control de versiones.
 
@@ -417,6 +474,12 @@ El archivo `.env` **no** debe subirse a control de versiones.
   pueden reiniciarse a vacío cuando el servicio se reinicia o "despierta"
   tras estar inactivo (para "Ideas y qué hacer", esto puede provocar
   alguna búsqueda de más de lo esperado contra la cuota gratuita de
-  SerpApi).
+  SerpApi). Por el mismo motivo, los archivos de `logs/` se pierden en
+  cada reinicio en Render Free — para un historial que sobreviva eso,
+  revisa la pestaña "Logs" del dashboard de Render en vez del archivo.
+- El plan gratuito de Groq permite 30 peticiones por minuto y 1,000 al
+  día; de sobra para uso personal, pero si varias personas usan "Sugerir
+  con IA" muy seguido podría alcanzarse el límite (se avisa con un
+  mensaje claro, no se rompe la app).
 - La comparación de fechas (pasado/futuro) usa la fecha del servidor, no
   la zona horaria del lugar de la cita.

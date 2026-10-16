@@ -352,6 +352,40 @@ button { font-family: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 .btn-terciario:hover { background: var(--acento); color: white; }
+.btn-terciario:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--fondo);
+  color: var(--texto-suave);
+  border-color: var(--borde);
+}
+
+/* ---------- Sugerencia de IA ---------- */
+
+.ia-ayuda {
+  font-size: 12px;
+  color: var(--texto-suave);
+  margin: 6px 0 0;
+}
+
+.ia-sugerencia {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--borde);
+  border-left: 4px solid var(--dorado);
+  border-radius: var(--radio-chico);
+  background: var(--fondo);
+}
+.ia-sugerencia h4 {
+  margin: 0 0 6px;
+  font-family: 'Fraunces', serif;
+  font-size: 16px;
+}
+.ia-sugerencia p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
 
 .fila button[type="button"]#btn-buscar-lugar {
   background: var(--acento);

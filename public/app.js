@@ -145,6 +145,15 @@ const btnIrAPersonas = document.getElementById('btn-ir-a-personas');
 const inputFecha = document.getElementById('cita-fecha');
 const selectHora = document.getElementById('cita-hora');
 
+const btnSugerirIa = document.getElementById('btn-sugerir-ia');
+const iaAyuda = document.querySelector('.ia-ayuda');
+const iaCargando = document.getElementById('ia-cargando');
+const iaMensaje = document.getElementById('ia-mensaje');
+const iaSugerenciaCard = document.getElementById('ia-sugerencia');
+const iaSugerenciaTitulo = document.getElementById('ia-sugerencia-titulo');
+const iaSugerenciaDescripcion = document.getElementById('ia-sugerencia-descripcion');
+const btnUsarSugerencia = document.getElementById('btn-usar-sugerencia');
+
 const tabsUbicacion = document.querySelectorAll('.tab-ubicacion');
 const modoBuscar = document.getElementById('modo-buscar');
 const modoCoordenadas = document.getElementById('modo-coordenadas');
@@ -423,7 +432,61 @@ function fijarUbicacion(ubicacion) {
   ocultarMensaje(lugaresMensaje);
   seccionSugerencias.classList.remove('oculto');
   tituloSugerencias.textContent = `Lugares para tu plan en ${ubicacion.nombre}`;
+  actualizarEstadoBotonIA();
 }
+
+/**
+ * El boton de "Sugerir con IA" solo se activa cuando ya hay tipo de
+ * plan, fecha y ubicacion elegidos (la persona es opcional).
+ */
+function actualizarEstadoBotonIA() {
+  const listo = Boolean(selectTipo.value) && Boolean(inputFecha.value) && Boolean(ubicacionSeleccionada);
+  btnSugerirIa.disabled = !listo;
+  iaAyuda.classList.toggle('oculto', listo);
+}
+
+selectTipo.addEventListener('change', actualizarEstadoBotonIA);
+inputFecha.addEventListener('change', actualizarEstadoBotonIA);
+
+function ocultarSugerenciaIA() {
+  iaSugerenciaCard.classList.add('oculto');
+  ocultarMensaje(iaMensaje);
+  iaSugerenciaTitulo.textContent = '';
+  iaSugerenciaDescripcion.textContent = '';
+}
+
+btnSugerirIa.addEventListener('click', async () => {
+  ocultarSugerenciaIA();
+  iaCargando.classList.remove('oculto');
+  btnSugerirIa.disabled = true;
+
+  try {
+    const data = await llamarApi('/api/sugerir-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: selectTipo.value,
+        personaId: selectPersona.value || null,
+        fecha: inputFecha.value,
+        ubicacion: ubicacionSeleccionada
+      })
+    });
+
+    iaSugerenciaTitulo.textContent = data.titulo;
+    iaSugerenciaDescripcion.textContent = data.descripcion;
+    iaSugerenciaCard.classList.remove('oculto');
+  } catch (err) {
+    mostrarMensaje(iaMensaje, err.message);
+  } finally {
+    iaCargando.classList.add('oculto');
+    btnSugerirIa.disabled = false;
+  }
+});
+
+btnUsarSugerencia.addEventListener('click', () => {
+  inputTitulo.value = iaSugerenciaTitulo.textContent;
+  ocultarSugerenciaIA();
+});
 
 btnBuscarLugar.addEventListener('click', async () => {
   ocultarMensaje(elMensajeForm);
@@ -558,6 +621,8 @@ formCita.addEventListener('submit', async (evento) => {
     seccionSugerencias.classList.add('oculto');
     listaResultadosUbicacion.innerHTML = '';
     listaLugares.innerHTML = '';
+    ocultarSugerenciaIA();
+    actualizarEstadoBotonIA();
 
     cargarCitas();
   } catch (err) {

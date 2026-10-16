@@ -12,6 +12,8 @@ const personas = require('./personas');
 const tops = require('./tops');
 const auth = require('./auth');
 const pagos = require('./pagos');
+const logger = require('./logger');
+const ia = require('./ia');
 
 const app = express();
 
@@ -31,12 +33,74 @@ const TIMEOUT_MS = 8000;
 let SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET) {
   SESSION_SECRET = crypto.randomBytes(32).toString('hex');
-  console.warn('[sesion] No se configuro SESSION_SECRET: se genero uno temporal. Las sesiones se perderan al reiniciar el servidor.');
+  logger.warning({
+    actor: 'sistema',
+    funcion: 'arranque',
+    mensaje: 'No se configuro SESSION_SECRET: se genero uno temporal. Las sesiones se perderan al reiniciar el servidor.'
+  });
 }
 
 // Necesario para que las cookies "secure" funcionen detras del proxy de
 // Render (que termina el HTTPS y reenvia por HTTP internamente).
 app.set('trust proxy', 1);
+
+// ---------------------------------------------------------------------------
+// Middleware de logging: registra cada peticion a /api, /auth y /webhooks
+// con quien la hizo (actor), en que ruta ocurrio (funcion), que se envio
+// (input) y que se respondio (output), con su nivel (INFO/WARNING/ERROR
+// segun el codigo de estado). Se registra AL PRINCIPIO de todo, antes de
+// cualquier otro middleware, para poder "envolver" res.json/send/redirect
+// y capturar la respuesta de cualquier ruta, sin importar como responda.
+// ---------------------------------------------------------------------------
+function actorDePeticion(req) {
+  return req.session && req.session.usuarioId ? `usuario:${req.session.usuarioId}` : 'anonimo';
+}
+
+function cuerpoParaLog(body) {
+  if (body === undefined) return undefined;
+  if (Buffer.isBuffer(body)) return `[cuerpo crudo, ${body.length} bytes]`;
+  if (body && typeof body === 'object') {
+    const { password, clientSecret, ...resto } = body;
+    return resto;
+  }
+  return body;
+}
+
+app.use((req, res, next) => {
+  const jsonOriginal = res.json.bind(res);
+  const sendOriginal = res.send.bind(res);
+  const redirectOriginal = res.redirect.bind(res);
+  let cuerpoRespuesta;
+
+  res.json = (payload) => {
+    cuerpoRespuesta = payload;
+    return jsonOriginal(payload);
+  };
+  res.send = (payload) => {
+    if (cuerpoRespuesta === undefined) cuerpoRespuesta = payload;
+    return sendOriginal(payload);
+  };
+  res.redirect = (...args) => {
+    cuerpoRespuesta = { redirigidoA: args[args.length - 1] };
+    return redirectOriginal(...args);
+  };
+
+  res.on('finish', () => {
+    if (!req.path.startsWith('/api/') && !req.path.startsWith('/auth/') && !req.path.startsWith('/webhooks/')) {
+      return;
+    }
+    const nivel = res.statusCode >= 500 ? 'ERROR' : res.statusCode >= 400 ? 'WARNING' : 'INFO';
+    logger.registrar({
+      nivel,
+      actor: actorDePeticion(req),
+      funcion: `${req.method} ${req.path}`,
+      input: { params: req.params, query: req.query, body: cuerpoParaLog(req.body) },
+      output: { status: res.statusCode, cuerpo: cuerpoRespuesta }
+    });
+  });
+
+  next();
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -81,14 +145,26 @@ function conApiKey(url) {
   return url;
 }
 
-function manejarError(err, res, contexto) {
+function manejarError(err, res, contexto, req) {
   if (err.name === 'AbortError') {
+    logger.warning({
+      actor: req ? actorDePeticion(req) : 'sistema',
+      funcion: contexto,
+      output: { error: 'tiempo_agotado' },
+      mensaje: `Tiempo agotado en ${contexto}`
+    });
     return res.status(504).json({
       error: 'tiempo_agotado',
       mensaje: `La solicitud de ${contexto} tardo demasiado en responder. Intenta de nuevo.`
     });
   }
   console.error(`[error:${contexto}]`, err);
+  logger.error({
+    actor: req ? actorDePeticion(req) : 'sistema',
+    funcion: contexto,
+    output: { error: err.message },
+    mensaje: `Error inesperado en ${contexto}`
+  });
   return res.status(500).json({
     error: 'error_interno',
     mensaje: 'Ocurrio un error inesperado en el servidor. Intenta de nuevo mas tarde.'
@@ -221,7 +297,7 @@ app.get('/api/geocode', async (req, res) => {
       }))
     });
   } catch (err) {
-    manejarError(err, res, 'geocodificacion');
+    manejarError(err, res, 'geocodificacion', req);
   }
 });
 
@@ -254,12 +330,19 @@ app.get('/api/sugerencias', async (req, res) => {
         `[lugares] Fallo al consultar Overpass (tipo=${tipoId}, lat=${lat}, lon=${lon}):`,
         err.detalleTecnico || err.message
       );
+      logger.warning({
+        actor: actorDePeticion(req),
+        funcion: 'GET /api/sugerencias',
+        input: { tipo: tipoId, lat, lon },
+        output: { error: err.detalleTecnico || err.message },
+        mensaje: 'Fallo al consultar Overpass'
+      });
       return res.status(502).json({
         error: 'error_servicio_externo',
         mensaje: `No se pudieron obtener sugerencias de lugares (${err.message}). Intenta de nuevo en un momento.`
       });
     }
-    manejarError(err, res, 'busqueda de lugares');
+    manejarError(err, res, 'busqueda de lugares', req);
   }
 });
 
@@ -304,7 +387,7 @@ app.get('/api/personas', auth.requiereSesion, async (req, res) => {
     const lista = await personas.obtenerPersonas(req.session.usuarioId);
     res.json({ personas: lista });
   } catch (err) {
-    manejarError(err, res, 'lectura de personas');
+    manejarError(err, res, 'lectura de personas', req);
   }
 });
 
@@ -331,7 +414,7 @@ app.post('/api/personas', auth.requiereSesion, async (req, res) => {
     });
     res.status(201).json({ persona: nuevaPersona });
   } catch (err) {
-    manejarError(err, res, 'creacion de persona');
+    manejarError(err, res, 'creacion de persona', req);
   }
 });
 
@@ -360,7 +443,7 @@ app.put('/api/personas/:id', auth.requiereSesion, async (req, res) => {
     }
     res.json({ persona: actualizada });
   } catch (err) {
-    manejarError(err, res, 'edicion de persona');
+    manejarError(err, res, 'edicion de persona', req);
   }
 });
 
@@ -375,7 +458,7 @@ app.delete('/api/personas/:id', auth.requiereSesion, async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) {
-    manejarError(err, res, 'eliminacion de persona');
+    manejarError(err, res, 'eliminacion de persona', req);
   }
 });
 
@@ -455,7 +538,7 @@ app.get('/api/citas', auth.requiereSesion, async (req, res) => {
     const citas = await db.obtenerCitas(req.session.usuarioId);
     res.json({ citas });
   } catch (err) {
-    manejarError(err, res, 'lectura de citas');
+    manejarError(err, res, 'lectura de citas', req);
   }
 });
 
@@ -509,7 +592,7 @@ app.post('/api/citas', auth.requiereSesion, async (req, res) => {
     });
     res.status(201).json({ cita: nuevaCita });
   } catch (err) {
-    manejarError(err, res, 'creacion de cita');
+    manejarError(err, res, 'creacion de cita', req);
   }
 });
 
@@ -524,7 +607,7 @@ app.delete('/api/citas/:id', auth.requiereSesion, async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) {
-    manejarError(err, res, 'eliminacion de cita');
+    manejarError(err, res, 'eliminacion de cita', req);
   }
 });
 
@@ -548,7 +631,7 @@ app.get('/api/citas/:id/clima', auth.requiereSesion, async (req, res) => {
         mensaje: `No se pudo obtener el clima para esta cita (${err.message}).`
       });
     }
-    manejarError(err, res, 'clima de la cita');
+    manejarError(err, res, 'clima de la cita', req);
   }
 });
 
@@ -596,7 +679,7 @@ app.post('/api/crear-pago', auth.requiereSesion, async (req, res) => {
     });
     res.json({ url: urlCheckout });
   } catch (err) {
-    manejarError(err, res, 'creacion de pago');
+    manejarError(err, res, 'creacion de pago', req);
   }
 });
 
@@ -624,12 +707,85 @@ app.get('/api/tops/:categoriaId', auth.requiereSesion, async (req, res) => {
   } catch (err) {
     if (err instanceof tops.ErrorServicioTops) {
       console.error(`[tops] Fallo al obtener categoria=${categoria.id}:`, err.message);
+      logger.warning({
+        actor: actorDePeticion(req),
+        funcion: 'GET /api/tops/:categoriaId',
+        input: { categoriaId: categoria.id },
+        output: { error: err.message },
+        mensaje: 'Fallo al consultar SerpApi'
+      });
       return res.status(502).json({
         error: 'error_servicio_externo',
         mensaje: `No se pudieron obtener ideas para esta categoría (${err.message}). Intenta de nuevo en un momento.`
       });
     }
-    manejarError(err, res, 'busqueda de tops');
+    manejarError(err, res, 'busqueda de tops', req);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/sugerir-plan — pide a la IA (Groq) un titulo + descripcion
+// ---------------------------------------------------------------------------
+function climaATextoDescriptivo(resultado) {
+  if (!resultado || resultado.estado === 'no_disponible') return null;
+  const { datos } = resultado;
+  const lluvia = datos.precipitacion > 0
+    ? `, con posibilidad de lluvia (${datos.precipitacion} mm)`
+    : ', sin lluvia esperada';
+  return `máxima ${Math.round(datos.temperaturaMax)}°C, mínima ${Math.round(datos.temperaturaMin)}°C${lluvia}`;
+}
+
+app.post('/api/sugerir-plan', auth.requiereSesion, async (req, res) => {
+  const { tipo, personaId, fecha, ubicacion } = req.body || {};
+
+  const tipoInfo = obtenerTipoPorId(tipo);
+  if (!tipoInfo) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'Debes indicar un tipo de plan válido.' });
+  }
+  if (!fecha || typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'Debes indicar una fecha válida.' });
+  }
+  const erroresUbicacion = validarUbicacion(ubicacion, 'una ubicación');
+  if (erroresUbicacion.length > 0) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: erroresUbicacion.join(' ') });
+  }
+
+  try {
+    let persona = null;
+    if (personaId) {
+      persona = await personas.obtenerPersonaPorId(personaId, req.session.usuarioId);
+      if (!persona) {
+        return res.status(400).json({ error: 'datos_invalidos', mensaje: 'El perfil seleccionado no existe.' });
+      }
+    }
+
+    // El clima es un "nice to have" para la sugerencia: si falla, seguimos
+    // sin el, en vez de bloquear toda la sugerencia por eso.
+    let climaTexto = null;
+    try {
+      const resultadoClima = await obtenerClimaParaFecha(Number(ubicacion.lat), Number(ubicacion.lon), fecha);
+      climaTexto = climaATextoDescriptivo(resultadoClima);
+    } catch (errClima) {
+      climaTexto = null;
+    }
+
+    const resultado = await ia.sugerirPlan({
+      actor: actorDePeticion(req),
+      etiquetaTipo: tipoInfo.etiqueta,
+      persona,
+      climaTexto,
+      lugarNombre: ubicacion.nombre
+    });
+
+    res.json(resultado);
+  } catch (err) {
+    if (err instanceof ia.ErrorServicioIA) {
+      return res.status(502).json({
+        error: 'error_servicio_externo',
+        mensaje: `No se pudo generar una sugerencia con IA (${err.message}).`
+      });
+    }
+    manejarError(err, res, 'sugerencia de IA', req);
   }
 });
 
@@ -637,6 +793,7 @@ app.get('/api/health', (_req, res) => res.json({ estado: 'ok' }));
 
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
+  logger.info({ actor: 'sistema', funcion: 'arranque', output: { puerto: PORT }, mensaje: 'Servidor iniciado' });
   if (!OPEN_METEO_API_KEY) {
     console.log('Nota: no se configuro OPEN_METEO_API_KEY. Se usara el servicio gratuito de Open-Meteo.');
   }

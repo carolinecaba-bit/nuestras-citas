@@ -9,6 +9,7 @@
 // -----------------------------------------------------------------------
 const eventosStripe = require('./eventosStripe');
 const correo = require('./correo');
+const logger = require('./logger');
 
 function credencialesConfiguradas() {
   return Boolean(process.env.STRIPE_SECRET_KEY);
@@ -76,6 +77,11 @@ async function crearSesionCheckout({ usuarioId, email }) {
 async function manejarWebhook(req, res) {
   if (!webhookConfigurado() || !credencialesConfiguradas()) {
     console.error('[stripe] Webhook recibido pero STRIPE_SECRET_KEY o STRIPE_WEBHOOK_SECRET no estan configurados.');
+    logger.warning({
+      actor: 'stripe-webhook',
+      funcion: 'manejarWebhook',
+      mensaje: 'Webhook recibido pero no esta configurado en el servidor'
+    });
     return res.status(500).send('Webhook no configurado en este servidor.');
   }
 
@@ -89,15 +95,35 @@ async function manejarWebhook(req, res) {
     // Firma invalida: podria ser una peticion falsa, o una clave mal
     // configurada. Nunca procesamos un evento sin firma valida.
     console.error('[stripe] Firma de webhook invalida:', err.message);
+    logger.warning({
+      actor: 'stripe-webhook',
+      funcion: 'manejarWebhook',
+      output: { error: err.message },
+      mensaje: 'Firma de webhook invalida (posible peticion falsa)'
+    });
     return res.status(400).send(`Firma invalida: ${err.message}`);
   }
 
   // Se registra CADA evento recibido, sin importar el tipo.
   console.log(`[stripe] Evento recibido: ${evento.type} (id: ${evento.id})`);
+  logger.info({
+    actor: 'stripe-webhook',
+    funcion: 'manejarWebhook',
+    input: { tipoEvento: evento.type, eventoId: evento.id },
+    output: { recibido: true },
+    mensaje: 'Evento de webhook recibido y verificado'
+  });
   try {
     await eventosStripe.registrarEvento(evento);
   } catch (err) {
     console.error('[stripe] No se pudo guardar el registro del evento:', err.message);
+    logger.error({
+      actor: 'stripe-webhook',
+      funcion: 'manejarWebhook',
+      input: { eventoId: evento.id },
+      output: { error: err.message },
+      mensaje: 'No se pudo guardar el registro del evento en eventos-stripe.json'
+    });
   }
 
   // Respondemos de inmediato: Stripe espera un 2xx rapido, y el envio
@@ -122,6 +148,12 @@ async function manejarWebhook(req, res) {
         });
     } else {
       console.warn('[stripe] El pago se completo pero no se encontro un email para notificar.');
+      logger.warning({
+        actor: 'stripe-webhook',
+        funcion: 'manejarWebhook',
+        input: { eventoId: evento.id },
+        mensaje: 'Pago completado pero sin email para notificar'
+      });
     }
   }
 }
