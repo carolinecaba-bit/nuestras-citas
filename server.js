@@ -724,7 +724,7 @@ app.get('/api/tops/:categoriaId', auth.requiereSesion, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/sugerir-plan — pide a la IA (Groq) un titulo + descripcion
+// POST /api/sugerir-plan — pide a la IA (AI SDK, modelo en AI_MODEL) un titulo + descripcion
 // ---------------------------------------------------------------------------
 function climaATextoDescriptivo(resultado) {
   if (!resultado || resultado.estado === 'no_disponible') return null;
@@ -780,7 +780,9 @@ app.post('/api/sugerir-plan', auth.requiereSesion, async (req, res) => {
     res.json(resultado);
   } catch (err) {
     if (err instanceof ia.ErrorServicioIA) {
-      return res.status(502).json({
+      // 503: la IA no esta disponible, pero el resto de la app sigue
+      // funcionando y la cita se puede llenar a mano.
+      return res.status(503).json({
         error: 'error_servicio_externo',
         mensaje: `No se pudo generar una sugerencia con IA (${err.message}).`
       });

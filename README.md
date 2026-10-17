@@ -65,8 +65,9 @@ gratuitos y sin necesidad de API Key.
 13. **Sugerir plan con IA**: botón "✨ Sugerir con IA" en el formulario de
     citas (se activa al elegir tipo, fecha y ubicación). Genera un título
     y una breve idea personalizada usando los datos de la persona elegida
-    (si hay una), el clima del día y el lugar, vía [Groq](https://groq.com)
-    (gratis, formato estándar de OpenAI). La sugerencia nunca se guarda
+    (si hay una), el clima del día y el lugar, con el [AI SDK de
+    Vercel](https://ai-sdk.dev) y salida estructurada (esquema Zod). El
+    proveedor (Google Gemini o Groq) se elige con `AI_MODEL`. La sugerencia nunca se guarda
     sola: hay que hacer clic en "Usar este título" para aplicarla.
 14. **Registro de actividad (logs)**: cada petición a la app queda
     registrada en `logs/AAAAMMDD.log` (un archivo por día) con fecha,
@@ -202,27 +203,36 @@ configurarla, sin afectar el resto de la app.
 > más. Para un uso personal esto no debería acercarse al límite mensual,
 > pero si notas que se agota, revisa tu consumo en el Dashboard de SerpApi.
 
-## Configurar "Sugerir con IA" (Groq)
+## Configurar "Sugerir con IA"
 
 Es opcional: sin esto, el botón de sugerencia muestra un mensaje claro
 pidiendo configurarlo, sin romper el resto del formulario.
 
-1. Crea una cuenta gratuita en [console.groq.com](https://console.groq.com).
-2. Ve a **API Keys** → **Create API Key**, y copia la clave generada.
-3. Pégala en tu `.env` como `GROQ_API_KEY`.
-4. El plan gratuito de Groq permite **30 peticiones por minuto y 1,000 al
-   día**, sin necesidad de tarjeta de crédito — de sobra para esta función.
-5. `GROQ_MODEL` y `GROQ_BASE_URL` son opcionales (ya tienen un valor por
-   defecto razonable). Si Groq descontinúa el modelo usado por defecto,
-   solo hay que cambiar `GROQ_MODEL` — nunca hace falta tocar el código.
+La función usa el AI SDK de Vercel con un registro de proveedores. El
+proveedor y el modelo se eligen solo con la variable `AI_MODEL`, en el
+formato `proveedor:modelo`. Cambiar de proveedor nunca requiere tocar el
+código, y si un modelo se retira, basta con cambiar esa variable.
+
+1. Elige un proveedor y consigue su llave:
+   - **Google Gemini**: en [aistudio.google.com](https://aistudio.google.com),
+     **Get API key** → **Create API key**. Va en `GOOGLE_GENERATIVE_AI_API_KEY`.
+   - **Groq**: en [console.groq.com](https://console.groq.com), **API Keys**
+     → **Create API Key**. Va en `GROQ_API_KEY`.
+2. Pon el modelo en `AI_MODEL`, por ejemplo `google:gemini-3.8-flash` o
+   `groq:openai/gpt-oss-120b`. El nombre exacto sale de la lista de
+   modelos de cada proveedor.
+3. Agrega las mismas variables en la pestaña **Environment** de Render.
+
+En los niveles gratuitos, revisa las condiciones de uso de datos de cada
+proveedor antes de abrir la app a otras personas.
 
 **Nota de seguridad**: los datos de la persona elegida (nombre, notas,
 comida favorita) se le envían a la IA siempre como *información*, nunca
 como *instrucciones* — el prompt del sistema le ordena explícitamente
 ignorar cualquier texto dentro de esos datos que intente darle una orden
-distinta. Además, la respuesta de la IA se valida estrictamente: solo se
-aceptan un título y una descripción dentro de un límite de caracteres;
-cualquier otra cosa se descarta.
+distinta. Además, la forma de la respuesta la garantiza un esquema Zod que
+viaja en la petición (salida estructurada): solo se aceptan un título y
+una descripción dentro de un límite de caracteres.
 
 ## Instalación
 
@@ -273,7 +283,7 @@ nuestras-citas/
 ├── pagos.js                # Stripe: crea la sesion de Checkout y maneja el webhook
 ├── eventosStripe.js         # Registro persistente de cada evento de webhook recibido
 ├── tops.js                  # "Ideas y que hacer": busqueda en vivo via SerpApi + cache en disco
-├── ia.js                    # "Sugerir con IA": llama a Groq, valida la respuesta, registra tokens/duracion
+├── ia.js                    # "Sugerir con IA": AI SDK + esquema Zod, modelo en AI_MODEL, registra tokens/duracion
 ├── logger.js                # Logging estructurado: fecha, nivel, actor, funcion, input, output
 ├── analizador.js           # Catalogo de tipos de plan (picnic, cena, etc.) y sus tags de OpenStreetMap
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
@@ -382,9 +392,9 @@ proyecto) y devuelve `{ url }` — el frontend redirige el navegador ahí.
 Requiere sesión. Cuerpo: `{ tipo, personaId, fecha, ubicacion }`
 (`personaId` opcional). Devuelve `{ titulo, descripcion }` generados por
 IA a partir del tipo de plan, la persona (si se indicó), el clima de esa
-fecha/ubicación, y el lugar. Si `GROQ_API_KEY` no está configurada, o la
-IA falla o responde en un formato inválido, devuelve `502` con un
-mensaje claro — nunca una sugerencia a medias.
+fecha/ubicación, y el lugar. Si `AI_MODEL` o la llave de su proveedor no
+están configuradas, o la IA falla o tarda más de 20 segundos, devuelve
+`503` con un mensaje claro — nunca una sugerencia a medias.
 
 ### `POST /webhooks/stripe`
 Recibido directamente por Stripe (no por el frontend). Verifica la firma
@@ -448,9 +458,9 @@ no, busca en vivo con SerpApi y actualiza el caché.
 | `STRIPE_WEBHOOK_SECRET`  | No          | Signing secret del endpoint de webhook en el Dashboard de Stripe     |
 | `SERPAPI_API_KEY`        | No          | API Key de SerpApi; sin ella, "Ideas y qué hacer" da un aviso claro  |
 | `TOPS_CACHE_HORAS`       | No          | Horas que se reutiliza un resultado antes de rebuscar (por defecto 24) |
-| `GROQ_API_KEY`           | No          | API Key de Groq; sin ella, "Sugerir con IA" da un aviso claro         |
-| `GROQ_MODEL`             | No          | Modelo a usar (por defecto `llama-3.1-8b-instant`)                    |
-| `GROQ_BASE_URL`          | No          | URL base de la API (por defecto `https://api.groq.com/openai/v1`)    |
+| `AI_MODEL`               | No          | Proveedor y modelo para "Sugerir con IA" (`proveedor:modelo`)         |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | No    | Llave de Google Gemini (si `AI_MODEL` empieza con `google:`)          |
+| `GROQ_API_KEY`           | No          | Llave de Groq (si `AI_MODEL` empieza con `groq:`)                     |
 
 El archivo `.env` **no** debe subirse a control de versiones.
 
@@ -477,9 +487,9 @@ El archivo `.env` **no** debe subirse a control de versiones.
   SerpApi). Por el mismo motivo, los archivos de `logs/` se pierden en
   cada reinicio en Render Free — para un historial que sobreviva eso,
   revisa la pestaña "Logs" del dashboard de Render en vez del archivo.
-- El plan gratuito de Groq permite 30 peticiones por minuto y 1,000 al
-  día; de sobra para uso personal, pero si varias personas usan "Sugerir
-  con IA" muy seguido podría alcanzarse el límite (se avisa con un
-  mensaje claro, no se rompe la app).
+- Los planes gratuitos de Google y Groq tienen límites de peticiones; de
+  sobra para uso personal, pero si varias personas usan "Sugerir con IA"
+  muy seguido podría alcanzarse el límite (se avisa con un mensaje claro,
+  no se rompe la app).
 - La comparación de fechas (pasado/futuro) usa la fecha del servidor, no
   la zona horaria del lugar de la cita.
