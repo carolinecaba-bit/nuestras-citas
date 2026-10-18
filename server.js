@@ -9,6 +9,7 @@ const { TIPOS_CITA, obtenerTipoPorId } = require('./analizador');
 const { buscarLugares, ErrorServicioLugares } = require('./lugares');
 const usuarios = require('./usuarios');
 const personas = require('./personas');
+const lugaresGuardados = require('./lugaresGuardados');
 const tops = require('./tops');
 const auth = require('./auth');
 const pagos = require('./pagos');
@@ -355,7 +356,7 @@ app.get('/api/relaciones', (_req, res) => {
 
 function validarPersona(body) {
   const errores = [];
-  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas } = body || {};
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes } = body || {};
 
   if (!nombre || typeof nombre !== 'string' || nombre.trim().length < 2) {
     errores.push('El nombre debe tener al menos 2 caracteres.');
@@ -375,8 +376,35 @@ function validarPersona(body) {
   if (notas !== undefined && notas !== null && typeof notas !== 'string') {
     errores.push('Las notas no son válidas.');
   }
+  if (fechasImportantes !== undefined && fechasImportantes !== null) {
+    if (!Array.isArray(fechasImportantes) || fechasImportantes.length > MAX_FECHAS_IMPORTANTES) {
+      errores.push(`Puedes guardar hasta ${MAX_FECHAS_IMPORTANTES} fechas importantes por persona.`);
+    } else {
+      fechasImportantes.forEach((f) => {
+        if (!f || typeof f.nombre !== 'string' || f.nombre.trim().length < 2 || f.nombre.trim().length > 40) {
+          errores.push('Cada fecha importante necesita un nombre de 2 a 40 caracteres (ej: Aniversario).');
+        } else if (!esFechaISOValida(f.fecha)) {
+          errores.push(`La fecha de "${f.nombre.trim()}" no es válida.`);
+        }
+      });
+    }
+  }
 
   return errores;
+}
+
+const MAX_FECHAS_IMPORTANTES = 10;
+
+function esFechaISOValida(fecha) {
+  if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  const d = new Date(Date.UTC(anio, mes - 1, dia));
+  return d.getUTCFullYear() === anio && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
+function limpiarFechasImportantes(lista) {
+  if (!Array.isArray(lista)) return [];
+  return lista.map((f) => ({ nombre: f.nombre.trim(), fecha: f.fecha }));
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +428,7 @@ app.post('/api/personas', auth.requiereSesion, async (req, res) => {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
   }
 
-  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas } = req.body;
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes } = req.body;
 
   try {
     const nuevaPersona = await personas.crearPersona({
@@ -410,7 +438,8 @@ app.post('/api/personas', auth.requiereSesion, async (req, res) => {
       cumpleanos: cumpleanos || null,
       comidaFavorita: comidaFavorita ? comidaFavorita.trim() : null,
       correo: correo ? correo.trim() : null,
-      notas: notas ? notas.trim() : null
+      notas: notas ? notas.trim() : null,
+      fechasImportantes: limpiarFechasImportantes(fechasImportantes)
     });
     res.status(201).json({ persona: nuevaPersona });
   } catch (err) {
@@ -427,7 +456,7 @@ app.put('/api/personas/:id', auth.requiereSesion, async (req, res) => {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
   }
 
-  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas } = req.body;
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes } = req.body;
 
   try {
     const actualizada = await personas.actualizarPersona(req.params.id, req.session.usuarioId, {
@@ -436,7 +465,8 @@ app.put('/api/personas/:id', auth.requiereSesion, async (req, res) => {
       cumpleanos: cumpleanos || null,
       comidaFavorita: comidaFavorita ? comidaFavorita.trim() : null,
       correo: correo ? correo.trim() : null,
-      notas: notas ? notas.trim() : null
+      notas: notas ? notas.trim() : null,
+      fechasImportantes: limpiarFechasImportantes(fechasImportantes)
     });
     if (!actualizada) {
       return res.status(404).json({ error: 'no_encontrada', mensaje: 'No existe ese perfil.' });
@@ -590,6 +620,12 @@ app.post('/api/citas', auth.requiereSesion, async (req, res) => {
           }
         : null
     });
+    // El lugar usado se guarda solo en "Recientes". Es un extra: si
+    // falla, la cita ya quedo guardada y no se interrumpe nada.
+    lugaresGuardados.registrarUso(req.session.usuarioId, nuevaCita.ubicacion).catch((errLugar) => {
+      logger.warning({ actor: actorDePeticion(req), funcion: 'registrarLugarReciente', output: { error: errLugar.message }, mensaje: 'No se pudo guardar el lugar reciente' });
+    });
+
     res.status(201).json({ cita: nuevaCita });
   } catch (err) {
     manejarError(err, res, 'creacion de cita', req);
@@ -788,6 +824,76 @@ app.post('/api/sugerir-plan', auth.requiereSesion, async (req, res) => {
       });
     }
     manejarError(err, res, 'sugerencia de IA', req);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Lugares guardados (favoritos + recientes) del usuario
+// ---------------------------------------------------------------------------
+function validarAlias(alias) {
+  if (alias === undefined || alias === null) return null;
+  if (typeof alias !== 'string' || alias.trim().length > lugaresGuardados.ALIAS_MAX) {
+    return `El nombre corto puede tener hasta ${lugaresGuardados.ALIAS_MAX} caracteres.`;
+  }
+  return null;
+}
+
+app.get('/api/lugares-guardados', auth.requiereSesion, async (req, res) => {
+  try {
+    res.json({ lugares: await lugaresGuardados.obtenerLugares(req.session.usuarioId) });
+  } catch (err) {
+    manejarError(err, res, 'lectura de lugares guardados', req);
+  }
+});
+
+// Guarda un lugar como favorito (o lo marca, si ya estaba en recientes).
+app.post('/api/lugares-guardados', auth.requiereSesion, async (req, res) => {
+  const { nombre, lat, lon, alias } = req.body || {};
+  const errores = validarUbicacion({ nombre, lat, lon }, 'el lugar');
+  const errorAlias = validarAlias(alias);
+  if (errorAlias) errores.push(errorAlias);
+  if (errores.length > 0) {
+    return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
+  }
+  try {
+    const lugar = await lugaresGuardados.registrarUso(
+      req.session.usuarioId,
+      { nombre: nombre.trim(), lat: Number(lat), lon: Number(lon) },
+      { favorito: true, alias: alias && alias.trim() ? alias.trim() : null }
+    );
+    res.status(201).json({ lugar });
+  } catch (err) {
+    if (err.esLimite) return res.status(400).json({ error: 'limite', mensaje: err.message });
+    manejarError(err, res, 'guardado de lugar', req);
+  }
+});
+
+app.patch('/api/lugares-guardados/:id', auth.requiereSesion, async (req, res) => {
+  const { favorito, alias } = req.body || {};
+  if (favorito !== undefined && typeof favorito !== 'boolean') {
+    return res.status(400).json({ error: 'datos_invalidos', mensaje: 'El valor de favorito no es válido.' });
+  }
+  const errorAlias = validarAlias(alias);
+  if (errorAlias) return res.status(400).json({ error: 'datos_invalidos', mensaje: errorAlias });
+  try {
+    const lugar = await lugaresGuardados.actualizarLugar(req.params.id, req.session.usuarioId, {
+      favorito,
+      alias: alias === undefined ? undefined : (alias && alias.trim() ? alias.trim() : null)
+    });
+    if (!lugar) return res.status(404).json({ error: 'no_encontrado', mensaje: 'No existe ese lugar guardado.' });
+    res.json({ lugar });
+  } catch (err) {
+    manejarError(err, res, 'edicion de lugar guardado', req);
+  }
+});
+
+app.delete('/api/lugares-guardados/:id', auth.requiereSesion, async (req, res) => {
+  try {
+    const eliminado = await lugaresGuardados.eliminarLugar(req.params.id, req.session.usuarioId);
+    if (!eliminado) return res.status(404).json({ error: 'no_encontrado', mensaje: 'No existe ese lugar guardado.' });
+    res.json({ ok: true });
+  } catch (err) {
+    manejarError(err, res, 'eliminacion de lugar guardado', req);
   }
 });
 

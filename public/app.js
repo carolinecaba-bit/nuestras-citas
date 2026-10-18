@@ -66,123 +66,87 @@ function generarConsejo(datos, categoria) {
 }
 
 // -----------------------------------------------------------------------
-// Selector de hora amigable: opciones cada 30 minutos, agrupadas y en
-// formato de 12 horas, pero el valor guardado sigue siendo "HH:MM" (24h)
-// para no cambiar nada del backend.
+// Fechas: helpers en hora local (todas las fechas se manejan como
+// "AAAA-MM-DD", igual que en el servidor).
 // -----------------------------------------------------------------------
-const GRUPOS_HORA = [
-  { etiqueta: 'Mañana', desdeMin: 6 * 60, hastaMin: 11 * 60 + 30 },
-  { etiqueta: 'Tarde', desdeMin: 12 * 60, hastaMin: 17 * 60 + 30 },
-  { etiqueta: 'Noche', desdeMin: 18 * 60, hastaMin: 23 * 60 + 30 },
-  { etiqueta: 'Madrugada', desdeMin: 0, hastaMin: 5 * 60 + 30 }
-];
+// Para cumpleaños y fechas importantes sin año conocido se guarda este
+// año como marcador (1904 es bisiesto, asi el 29 de febrero es valido).
+const ANIO_DESCONOCIDO = 1904;
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const DIAS_CORTOS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+function conCero(n) { return String(n).padStart(2, '0'); }
+function aISO(d) { return `${d.getFullYear()}-${conCero(d.getMonth() + 1)}-${conCero(d.getDate())}`; }
+function deISO(iso) { const [a, m, d] = iso.split('-').map(Number); return new Date(a, m - 1, d); }
+function hoy() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function hoyISO() { return aISO(hoy()); }
+function sumarDias(fecha, n) { const d = new Date(fecha); d.setDate(d.getDate() + n); return d; }
+function diasHasta(iso) { return Math.round((deISO(iso) - hoy()) / 86400000); }
+
+function textoDiasHasta(dias) {
+  if (dias === 0) return 'Hoy';
+  if (dias === 1) return 'Mañana';
+  if (dias === -1) return 'Ayer';
+  if (dias > 1) return `En ${dias} días`;
+  return `Hace ${-dias} días`;
+}
+
+function formatearDiaMes(iso) {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${d} de ${MESES[m - 1]}`;
+}
+
+/** Proxima vez (hoy incluido) que cae un dia/mes que se repite cada año. */
+function siguienteOcurrencia(iso) {
+  const [, m, d] = iso.split('-').map(Number);
+  const base = hoy();
+  for (let suma = 0; suma <= 1; suma += 1) {
+    const anio = base.getFullYear() + suma;
+    const candidata = new Date(anio, m - 1, d);
+    // 29 de febrero en año no bisiesto: se celebra el 28.
+    if (candidata.getMonth() !== m - 1) candidata.setDate(0);
+    if (candidata >= base) return aISO(candidata);
+  }
+  return null;
+}
 
 function formatearHora12h(horas, minutos) {
   const periodo = horas < 12 ? 'a.m.' : 'p.m.';
   let horas12 = horas % 12;
   if (horas12 === 0) horas12 = 12;
-  return `${horas12}:${String(minutos).padStart(2, '0')} ${periodo}`;
+  return `${horas12}:${conCero(minutos)} ${periodo}`;
 }
 
-function poblarSelectHora(select) {
-  const partes = ['<option value="">Sin hora específica</option>'];
-  GRUPOS_HORA.forEach((grupo) => {
-    let opciones = '';
-    for (let min = grupo.desdeMin; min <= grupo.hastaMin; min += 30) {
-      const h = Math.floor(min / 60);
-      const m = min % 60;
-      const valor = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      opciones += `<option value="${valor}">${formatearHora12h(h, m)}</option>`;
-    }
-    partes.push(`<optgroup label="${grupo.etiqueta}">${opciones}</optgroup>`);
-  });
-  select.innerHTML = partes.join('');
+function capitalizar(texto) { return texto.charAt(0).toUpperCase() + texto.slice(1); }
+
+function formatearFechaLarga(iso) {
+  return deISO(iso).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function formatearFechaHora(cita) {
+  const fechaTexto = formatearFechaLarga(cita.fecha);
+  if (!cita.hora) return fechaTexto;
+  const [h, m] = cita.hora.split(':').map(Number);
+  return `${fechaTexto}, ${formatearHora12h(h, m)}`;
 }
 
 // -----------------------------------------------------------------------
 // Estado
 // -----------------------------------------------------------------------
+let usuarioActual = null;
 let tiposCita = [];
 let personas = [];
 let relacionesSugeridas = [];
-let editandoPersonaId = null;
-let modoUbicacionActivo = 'buscar';
-let ubicacionSeleccionada = null; // { nombre, lat, lon }
-let lugaresSugeridos = [];
-let lugarElegido = null; // { nombre, lat, lon, enlaceMapa }
+let citas = [];
+let lugaresGuardados = [];
+let filtroCitas = 'proximas';
 
 // -----------------------------------------------------------------------
-// Referencias del DOM
+// Helpers generales
 // -----------------------------------------------------------------------
-const elCuenta = document.getElementById('cuenta');
-const elPuertaLogin = document.getElementById('puerta-login');
-const elPuertaMensaje = document.getElementById('puerta-mensaje');
-const elContenidoApp = document.getElementById('contenido-app');
-const elMensajePago = document.getElementById('mensaje-pago');
+const $ = (id) => document.getElementById(id);
 
-// Formulario de personas
-const formPersona = document.getElementById('form-persona');
-const inputPersonaNombre = document.getElementById('persona-nombre');
-const selectPersonaRelacion = document.getElementById('persona-relacion');
-const inputPersonaRelacionOtra = document.getElementById('persona-relacion-otra');
-const inputPersonaCumpleanos = document.getElementById('persona-cumpleanos');
-const inputPersonaComida = document.getElementById('persona-comida');
-const inputPersonaCorreo = document.getElementById('persona-correo');
-const textareaPersonaNotas = document.getElementById('persona-notas');
-const mensajePersona = document.getElementById('mensaje-persona');
-const btnGuardarPersona = document.getElementById('btn-guardar-persona');
-const btnCancelarEdicionPersona = document.getElementById('btn-cancelar-edicion-persona');
-const cargandoPersonas = document.getElementById('cargando-personas');
-const listaPersonasEl = document.getElementById('lista-personas');
-const sinPersonas = document.getElementById('sin-personas');
-
-// Formulario de citas
-const formCita = document.getElementById('form-cita');
-const inputTitulo = document.getElementById('cita-titulo');
-const selectTipo = document.getElementById('cita-tipo');
-const selectPersona = document.getElementById('cita-persona');
-const btnIrAPersonas = document.getElementById('btn-ir-a-personas');
-const inputFecha = document.getElementById('cita-fecha');
-const selectHora = document.getElementById('cita-hora');
-
-const btnSugerirIa = document.getElementById('btn-sugerir-ia');
-const iaAyuda = document.querySelector('.ia-ayuda');
-const iaCargando = document.getElementById('ia-cargando');
-const iaMensaje = document.getElementById('ia-mensaje');
-const iaSugerenciaCard = document.getElementById('ia-sugerencia');
-const iaSugerenciaTitulo = document.getElementById('ia-sugerencia-titulo');
-const iaSugerenciaDescripcion = document.getElementById('ia-sugerencia-descripcion');
-const btnUsarSugerencia = document.getElementById('btn-usar-sugerencia');
-
-const tabsUbicacion = document.querySelectorAll('.tab-ubicacion');
-const modoBuscar = document.getElementById('modo-buscar');
-const modoCoordenadas = document.getElementById('modo-coordenadas');
-const inputBuscarLugar = document.getElementById('buscar-lugar');
-const btnBuscarLugar = document.getElementById('btn-buscar-lugar');
-const listaResultadosUbicacion = document.getElementById('lista-resultados-ubicacion');
-const inputCoordLat = document.getElementById('coord-lat');
-const inputCoordLon = document.getElementById('coord-lon');
-const inputCoordNombre = document.getElementById('coord-nombre');
-const btnUsarCoordenadas = document.getElementById('btn-usar-coordenadas');
-const elUbicacionSeleccionada = document.getElementById('ubicacion-seleccionada');
-
-const seccionSugerencias = document.getElementById('seccion-sugerencias');
-const tituloSugerencias = document.getElementById('titulo-sugerencias');
-const btnVerSugerencias = document.getElementById('btn-ver-sugerencias');
-const lugaresCargando = document.getElementById('lugares-cargando');
-const lugaresMensaje = document.getElementById('lugares-mensaje');
-const listaLugares = document.getElementById('lista-lugares');
-
-const elMensajeForm = document.getElementById('mensaje-form');
-
-const elMensajeLista = document.getElementById('mensaje-lista');
-const elCargandoLista = document.getElementById('cargando-lista');
-const elLineaTiempo = document.getElementById('linea-tiempo');
-const elSinCitas = document.getElementById('sin-citas');
-
-// -----------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------
 function mostrarMensaje(el, texto, tipo = 'error') {
   el.textContent = texto;
   el.classList.remove('oculto', 'mensaje-info');
@@ -195,8 +159,23 @@ function ocultarMensaje(el) {
 
 function escaparHtml(texto) {
   const div = document.createElement('div');
-  div.textContent = texto;
+  div.textContent = texto == null ? '' : String(texto);
   return div.innerHTML;
+}
+
+let temporizadorAviso = null;
+function avisar(texto) {
+  let el = document.querySelector('.aviso');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'aviso';
+    el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  el.textContent = texto;
+  el.classList.add('visible');
+  clearTimeout(temporizadorAviso);
+  temporizadorAviso = setTimeout(() => el.classList.remove('visible'), 3200);
 }
 
 async function llamarApi(url, opciones) {
@@ -222,448 +201,309 @@ async function llamarApi(url, opciones) {
   return datos;
 }
 
-// -----------------------------------------------------------------------
-// Cargar catalogo de tipos de plan
-// -----------------------------------------------------------------------
-async function cargarTiposCita() {
-  try {
-    const data = await llamarApi('/api/tipos-cita');
-    tiposCita = data.tipos;
-    selectTipo.innerHTML = tiposCita.map((t) => `<option value="${t.id}">${escaparHtml(t.etiqueta)}</option>`).join('');
-  } catch (err) {
-    selectTipo.innerHTML = '<option value="otro">Otro plan</option>';
-  }
-}
-
-// -----------------------------------------------------------------------
-// Personas (perfiles): catalogo de relaciones + CRUD
-// -----------------------------------------------------------------------
-async function cargarRelaciones() {
-  try {
-    const data = await llamarApi('/api/relaciones');
-    relacionesSugeridas = data.relaciones;
-  } catch (err) {
-    relacionesSugeridas = [];
-  }
-  selectPersonaRelacion.innerHTML =
-    relacionesSugeridas.map((r) => `<option value="${escaparHtml(r)}">${escaparHtml(r)}</option>`).join('') +
-    '<option value="__otra__">Otra…</option>';
-}
-
-selectPersonaRelacion.addEventListener('change', () => {
-  const esOtra = selectPersonaRelacion.value === '__otra__';
-  inputPersonaRelacionOtra.classList.toggle('oculto', !esOtra);
-  if (esOtra) inputPersonaRelacionOtra.focus();
-});
-
-function poblarSelectPersonaCita() {
-  const valorPrevio = selectPersona.value;
-  selectPersona.innerHTML =
-    '<option value="">Nadie en particular</option>' +
-    personas.map((p) => `<option value="${p.id}">${escaparHtml(p.nombre)} (${escaparHtml(p.relacion)})</option>`).join('');
-  if (personas.some((p) => p.id === valorPrevio)) {
-    selectPersona.value = valorPrevio;
-  }
-}
-
-function formatearCumpleanos(cumpleanos) {
-  if (!cumpleanos) return null;
-  const fecha = new Date(`${cumpleanos}T00:00:00`);
-  return fecha.toLocaleDateString('es', { day: 'numeric', month: 'long' });
-}
-
-function renderizarListaPersonas() {
-  listaPersonasEl.innerHTML = '';
-  sinPersonas.classList.toggle('oculto', personas.length > 0);
-
-  personas.forEach((persona) => {
-    const card = document.createElement('div');
-    card.className = 'persona-card';
-    const cumpleanosTexto = formatearCumpleanos(persona.cumpleanos);
-    card.innerHTML = `
-      <div class="persona-header">
-        <h4>${escaparHtml(persona.nombre)}</h4>
-        <span class="persona-relacion">${escaparHtml(persona.relacion)}</span>
-      </div>
-      ${cumpleanosTexto ? `<div class="persona-dato">🎂 ${cumpleanosTexto}</div>` : ''}
-      ${persona.comidaFavorita ? `<div class="persona-dato">🍽️ ${escaparHtml(persona.comidaFavorita)}</div>` : ''}
-      ${persona.correo ? `<div class="persona-dato">✉️ ${escaparHtml(persona.correo)}</div>` : ''}
-      ${persona.notas ? `<div class="persona-dato persona-notas">${escaparHtml(persona.notas)}</div>` : ''}
-      <div class="persona-acciones">
-        <button type="button" class="btn-terciario boton-editar">Editar</button>
-        <button type="button" class="btn-eliminar boton-eliminar">Eliminar</button>
-      </div>
-    `;
-    card.querySelector('.boton-editar').addEventListener('click', () => iniciarEdicionPersona(persona));
-    card.querySelector('.boton-eliminar').addEventListener('click', () => eliminarPersona(persona.id));
-    listaPersonasEl.appendChild(card);
+function enviarJson(url, metodo, cuerpo) {
+  return llamarApi(url, {
+    method: metodo,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cuerpo)
   });
 }
 
-async function cargarPersonas() {
-  cargandoPersonas.classList.remove('oculto');
-  try {
-    const data = await llamarApi('/api/personas');
-    personas = data.personas;
-    cargandoPersonas.classList.add('oculto');
-    renderizarListaPersonas();
-    poblarSelectPersonaCita();
-  } catch (err) {
-    cargandoPersonas.classList.add('oculto');
-  }
-}
-
-function iniciarEdicionPersona(persona) {
-  editandoPersonaId = persona.id;
-  inputPersonaNombre.value = persona.nombre;
-
-  if (relacionesSugeridas.includes(persona.relacion)) {
-    selectPersonaRelacion.value = persona.relacion;
-    inputPersonaRelacionOtra.classList.add('oculto');
-    inputPersonaRelacionOtra.value = '';
-  } else {
-    selectPersonaRelacion.value = '__otra__';
-    inputPersonaRelacionOtra.classList.remove('oculto');
-    inputPersonaRelacionOtra.value = persona.relacion;
-  }
-
-  inputPersonaCumpleanos.value = persona.cumpleanos || '';
-  inputPersonaComida.value = persona.comidaFavorita || '';
-  inputPersonaCorreo.value = persona.correo || '';
-  textareaPersonaNotas.value = persona.notas || '';
-
-  btnGuardarPersona.textContent = 'Guardar cambios';
-  btnCancelarEdicionPersona.classList.remove('oculto');
-  formPersona.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-btnCancelarEdicionPersona.addEventListener('click', () => {
-  editandoPersonaId = null;
-  formPersona.reset();
-  inputPersonaRelacionOtra.classList.add('oculto');
-  btnGuardarPersona.textContent = 'Guardar persona';
-  btnCancelarEdicionPersona.classList.add('oculto');
-  ocultarMensaje(mensajePersona);
-});
-
-formPersona.addEventListener('submit', async (evento) => {
-  evento.preventDefault();
-  ocultarMensaje(mensajePersona);
-
-  const nombre = inputPersonaNombre.value.trim();
-  const relacion = selectPersonaRelacion.value === '__otra__'
-    ? inputPersonaRelacionOtra.value.trim()
-    : selectPersonaRelacion.value;
-  const cumpleanos = inputPersonaCumpleanos.value || null;
-  const comidaFavorita = inputPersonaComida.value.trim() || null;
-  const correo = inputPersonaCorreo.value.trim() || null;
-  const notas = textareaPersonaNotas.value.trim() || null;
-
-  if (nombre.length < 2) { mostrarMensaje(mensajePersona, 'El nombre debe tener al menos 2 caracteres.'); return; }
-  if (!relacion || relacion.length < 2) { mostrarMensaje(mensajePersona, 'Indica la relación (o escribe la tuya).'); return; }
-  if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mostrarMensaje(mensajePersona, 'El correo no tiene un formato válido.'); return; }
-
-  const payload = { nombre, relacion, cumpleanos, comidaFavorita, correo, notas };
-
-  try {
-    if (editandoPersonaId) {
-      await llamarApi(`/api/personas/${editandoPersonaId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } else {
-      await llamarApi('/api/personas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
-
-    editandoPersonaId = null;
-    formPersona.reset();
-    inputPersonaRelacionOtra.classList.add('oculto');
-    btnGuardarPersona.textContent = 'Guardar persona';
-    btnCancelarEdicionPersona.classList.add('oculto');
-
-    await cargarPersonas();
-    cargarCitas(); // por si el cambio afecta como se ven citas ya listadas
-  } catch (err) {
-    mostrarMensaje(mensajePersona, err.message);
-  }
-});
-
-async function eliminarPersona(id) {
-  ocultarMensaje(mensajePersona);
-  try {
-    await llamarApi(`/api/personas/${id}`, { method: 'DELETE' });
-    await cargarPersonas();
-    cargarCitas();
-  } catch (err) {
-    mostrarMensaje(mensajePersona, err.message);
-  }
-}
-
-btnIrAPersonas.addEventListener('click', () => {
-  formPersona.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  inputPersonaNombre.focus();
-});
-
-// -----------------------------------------------------------------------
-// Tabs de ubicacion
-// -----------------------------------------------------------------------
-tabsUbicacion.forEach((tab) => {
-  tab.addEventListener('click', () => {
-    tabsUbicacion.forEach((t) => t.classList.remove('activo'));
-    tab.classList.add('activo');
-    modoUbicacionActivo = tab.dataset.modo;
-    modoBuscar.classList.toggle('activo', modoUbicacionActivo === 'buscar');
-    modoCoordenadas.classList.toggle('activo', modoUbicacionActivo === 'coordenadas');
-  });
-});
-
-function fijarUbicacion(ubicacion) {
-  ubicacionSeleccionada = ubicacion;
-  elUbicacionSeleccionada.textContent = `Ubicación: ${ubicacion.nombre}`;
-  elUbicacionSeleccionada.classList.remove('oculto');
-  lugaresSugeridos = [];
-  lugarElegido = null;
-  listaLugares.innerHTML = '';
-  ocultarMensaje(lugaresMensaje);
-  seccionSugerencias.classList.remove('oculto');
-  tituloSugerencias.textContent = `Lugares para tu plan en ${ubicacion.nombre}`;
-  actualizarEstadoBotonIA();
-}
-
-/**
- * El boton de "Sugerir con IA" solo se activa cuando ya hay tipo de
- * plan, fecha y ubicacion elegidos (la persona es opcional).
- */
-function actualizarEstadoBotonIA() {
-  const listo = Boolean(selectTipo.value) && Boolean(inputFecha.value) && Boolean(ubicacionSeleccionada);
-  btnSugerirIa.disabled = !listo;
-  iaAyuda.classList.toggle('oculto', listo);
-}
-
-selectTipo.addEventListener('change', actualizarEstadoBotonIA);
-inputFecha.addEventListener('change', actualizarEstadoBotonIA);
-
-function ocultarSugerenciaIA() {
-  iaSugerenciaCard.classList.add('oculto');
-  ocultarMensaje(iaMensaje);
-  iaSugerenciaTitulo.textContent = '';
-  iaSugerenciaDescripcion.textContent = '';
-}
-
-btnSugerirIa.addEventListener('click', async () => {
-  ocultarSugerenciaIA();
-  iaCargando.classList.remove('oculto');
-  btnSugerirIa.disabled = true;
-
-  try {
-    const data = await llamarApi('/api/sugerir-plan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tipo: selectTipo.value,
-        personaId: selectPersona.value || null,
-        fecha: inputFecha.value,
-        ubicacion: ubicacionSeleccionada
-      })
-    });
-
-    iaSugerenciaTitulo.textContent = data.titulo;
-    iaSugerenciaDescripcion.textContent = data.descripcion;
-    iaSugerenciaCard.classList.remove('oculto');
-  } catch (err) {
-    mostrarMensaje(iaMensaje, err.message);
-  } finally {
-    iaCargando.classList.add('oculto');
-    btnSugerirIa.disabled = false;
-  }
-});
-
-btnUsarSugerencia.addEventListener('click', () => {
-  inputTitulo.value = iaSugerenciaTitulo.textContent;
-  ocultarSugerenciaIA();
-});
-
-btnBuscarLugar.addEventListener('click', async () => {
-  ocultarMensaje(elMensajeForm);
-  listaResultadosUbicacion.innerHTML = '';
-  const consulta = inputBuscarLugar.value.trim();
-  if (consulta.length < 2) {
-    mostrarMensaje(elMensajeForm, 'Escribe al menos 2 caracteres para buscar una ubicación.');
-    return;
-  }
-  try {
-    const data = await llamarApi(`/api/geocode?q=${encodeURIComponent(consulta)}`);
-    data.resultados.forEach((lugar) => {
-      const item = document.createElement('li');
-      const region = lugar.region ? `${lugar.region}, ` : '';
-      item.textContent = `${lugar.nombre} · ${region}${lugar.pais || ''}`;
-      item.addEventListener('click', () => {
-        fijarUbicacion({ nombre: lugar.nombre, lat: lugar.latitud, lon: lugar.longitud });
-        listaResultadosUbicacion.innerHTML = '';
-      });
-      listaResultadosUbicacion.appendChild(item);
-    });
-  } catch (err) {
-    mostrarMensaje(elMensajeForm, err.message);
-  }
-});
-
-btnUsarCoordenadas.addEventListener('click', () => {
-  ocultarMensaje(elMensajeForm);
-  const lat = Number(inputCoordLat.value);
-  const lon = Number(inputCoordLon.value);
-  const nombre = inputCoordNombre.value.trim() || `Lat ${lat}, Lon ${lon}`;
-
-  if (inputCoordLat.value === '' || inputCoordLon.value === '' || Number.isNaN(lat) || Number.isNaN(lon)) {
-    mostrarMensaje(elMensajeForm, 'Ingresa latitud y longitud válidas.');
-    return;
-  }
-  if (lat < -90 || lat > 90) { mostrarMensaje(elMensajeForm, 'La latitud debe estar entre -90 y 90.'); return; }
-  if (lon < -180 || lon > 180) { mostrarMensaje(elMensajeForm, 'La longitud debe estar entre -180 y 180.'); return; }
-
-  fijarUbicacion({ nombre, lat, lon });
-});
-
-// -----------------------------------------------------------------------
-// Sugerencias de lugares
-// -----------------------------------------------------------------------
-btnVerSugerencias.addEventListener('click', async () => {
-  ocultarMensaje(lugaresMensaje);
-  if (!ubicacionSeleccionada) {
-    mostrarMensaje(lugaresMensaje, 'Primero elige una ubicación general arriba.');
-    return;
-  }
-
-  listaLugares.innerHTML = '';
-  lugaresCargando.classList.remove('oculto');
-
-  try {
-    const { lat, lon } = ubicacionSeleccionada;
-    const tipo = selectTipo.value;
-    const data = await llamarApi(`/api/sugerencias?lat=${lat}&lon=${lon}&tipo=${encodeURIComponent(tipo)}`);
-    lugaresCargando.classList.add('oculto');
-
-    lugaresSugeridos = data.lugares;
-    if (lugaresSugeridos.length === 0) {
-      mostrarMensaje(lugaresMensaje, 'No encontré lugares cercanos para este tipo de plan. Puedes usar solo la ubicación general.', 'info');
-      return;
-    }
-    renderizarLugares();
-  } catch (err) {
-    lugaresCargando.classList.add('oculto');
-    mostrarMensaje(lugaresMensaje, err.message);
-  }
-});
-
-function renderizarLugares() {
-  listaLugares.innerHTML = '';
-  lugaresSugeridos.forEach((lugar) => {
-    const card = document.createElement('div');
-    card.className = 'lugar-card';
-    if (lugarElegido && lugarElegido.lat === lugar.lat && lugarElegido.lon === lugar.lon) {
-      card.classList.add('elegido');
-    }
-    card.innerHTML = `
-      <h4>${escaparHtml(lugar.nombre)}</h4>
-      <div class="distancia">${lugar.distanciaKm} km de distancia</div>
-      <div class="acciones">
-        <button type="button" class="elegir">${lugarElegido && lugarElegido.lat === lugar.lat && lugarElegido.lon === lugar.lon ? 'Elegido' : 'Elegir'}</button>
-        <a class="enlace-mapa" href="${lugar.enlaceMapa}" target="_blank" rel="noopener">Ver mapa</a>
-      </div>
-    `;
-    card.querySelector('.elegir').addEventListener('click', () => {
-      lugarElegido = (lugarElegido && lugarElegido.lat === lugar.lat && lugarElegido.lon === lugar.lon) ? null : lugar;
-      renderizarLugares();
-    });
-    listaLugares.appendChild(card);
-  });
-}
-
-// -----------------------------------------------------------------------
-// Guardar cita
-// -----------------------------------------------------------------------
-formCita.addEventListener('submit', async (evento) => {
-  evento.preventDefault();
-  ocultarMensaje(elMensajeForm);
-
-  const titulo = inputTitulo.value.trim();
-  const tipo = selectTipo.value;
-  const personaId = selectPersona.value || null;
-  const fecha = inputFecha.value;
-  const hora = selectHora.value || null;
-
-  if (!fecha) { mostrarMensaje(elMensajeForm, 'Debes elegir una fecha para el plan.'); return; }
-  if (!ubicacionSeleccionada) { mostrarMensaje(elMensajeForm, 'Elige una ubicación general para el plan.'); return; }
-
-  try {
-    await llamarApi('/api/citas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        titulo: titulo || null, tipo, personaId, fecha, hora,
-        ubicacion: ubicacionSeleccionada,
-        lugarSugerido: lugarElegido
-      })
-    });
-
-    formCita.reset();
-    poblarSelectHora(selectHora);
-    poblarSelectPersonaCita();
-    ubicacionSeleccionada = null;
-    lugaresSugeridos = [];
-    lugarElegido = null;
-    elUbicacionSeleccionada.classList.add('oculto');
-    seccionSugerencias.classList.add('oculto');
-    listaResultadosUbicacion.innerHTML = '';
-    listaLugares.innerHTML = '';
-    ocultarSugerenciaIA();
-    actualizarEstadoBotonIA();
-
-    cargarCitas();
-  } catch (err) {
-    mostrarMensaje(elMensajeForm, err.message);
-  }
-});
-
-// -----------------------------------------------------------------------
-// Listar y renderizar citas (linea de tiempo)
-// -----------------------------------------------------------------------
-async function cargarCitas() {
-  ocultarMensaje(elMensajeLista);
-  elCargandoLista.classList.remove('oculto');
-  elLineaTiempo.innerHTML = '';
-  elSinCitas.classList.add('oculto');
-
-  try {
-    const data = await llamarApi('/api/citas');
-    elCargandoLista.classList.add('oculto');
-
-    if (!data.citas || data.citas.length === 0) {
-      elSinCitas.classList.remove('oculto');
-      return;
-    }
-    data.citas.forEach((cita) => renderizarCita(cita));
-  } catch (err) {
-    elCargandoLista.classList.add('oculto');
-    mostrarMensaje(elMensajeLista, err.message);
-  }
-}
-
-function formatearFechaHora(cita) {
-  const fecha = new Date(`${cita.fecha}T00:00:00`);
-  const fechaTexto = fecha.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
-  if (!cita.hora) return fechaTexto;
-  const [h, m] = cita.hora.split(':').map(Number);
-  return `${fechaTexto} · ${formatearHora12h(h, m)}`;
+function etiquetaTipo(id) {
+  const tipo = tiposCita.find((t) => t.id === id);
+  return tipo ? tipo.etiqueta : 'Plan';
 }
 
 function buscarPersonaPorId(id) {
   return personas.find((p) => p.id === id) || null;
+}
+
+function iniciales(nombre) {
+  return nombre.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+}
+
+// Color estable por persona, dentro de la paleta de la app.
+const TONOS_AVATAR = ['#4C56A6', '#C9A15A', '#5F8A6E', '#8A5A8C', '#3F7A99', '#B26B4A'];
+function tonoPersona(id) {
+  let suma = 0;
+  for (const c of id) suma = (suma + c.charCodeAt(0)) % 997;
+  return TONOS_AVATAR[suma % TONOS_AVATAR.length];
+}
+function avatarPersona(persona, clase = 'avatar-persona') {
+  return `<span class="${clase}" style="--tono:${tonoPersona(persona.id)}" aria-hidden="true">${escaparHtml(iniciales(persona.nombre))}</span>`;
+}
+
+function ordenarCitas(lista) {
+  return [...lista].sort((a, b) => `${a.fecha} ${a.hora || '99:99'}`.localeCompare(`${b.fecha} ${b.hora || '99:99'}`));
+}
+function citasProximas() { return ordenarCitas(citas.filter((c) => c.fecha >= hoyISO())); }
+function citasPasadas() { return ordenarCitas(citas.filter((c) => c.fecha < hoyISO())).reverse(); }
+
+// -----------------------------------------------------------------------
+// Pestañas del dashboard
+// -----------------------------------------------------------------------
+function irAPestana(nombre) {
+  document.querySelectorAll('.pestana').forEach((p) => {
+    const activa = p.dataset.pestana === nombre;
+    p.classList.toggle('activa', activa);
+    p.setAttribute('aria-selected', String(activa));
+  });
+  document.querySelectorAll('.panel').forEach((panel) => {
+    panel.classList.toggle('oculto', panel.id !== `panel-${nombre}`);
+  });
+  if (nombre === 'ideas' && !$('tabs-tops').children.length) cargarCategoriasTops();
+}
+
+document.querySelectorAll('.pestana').forEach((p) => {
+  p.addEventListener('click', () => irAPestana(p.dataset.pestana));
+});
+
+// Botones con data-accion (pueden aparecer en varios lugares)
+document.addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-accion]');
+  if (!boton) return;
+  const accion = boton.dataset.accion;
+  if (accion === 'nueva-cita') abrirAsistente();
+  if (accion === 'nueva-persona') abrirFormPersona();
+  if (accion === 'cerrar-asistente') cerrarAsistente();
+  if (accion === 'cerrar-lateral') cerrarLateral();
+});
+
+document.addEventListener('keydown', (evento) => {
+  if (evento.key !== 'Escape') return;
+  if (!$('panel-lateral').classList.contains('oculto')) cerrarLateral();
+  else if (!$('asistente').classList.contains('oculto')) cerrarAsistente();
+});
+
+// -----------------------------------------------------------------------
+// Carga de datos
+// -----------------------------------------------------------------------
+async function cargarTiposCita() {
+  try {
+    tiposCita = (await llamarApi('/api/tipos-cita')).tipos;
+  } catch (err) {
+    tiposCita = [{ id: 'otro', etiqueta: 'Otro plan' }];
+  }
+}
+
+async function cargarRelaciones() {
+  try {
+    relacionesSugeridas = (await llamarApi('/api/relaciones')).relaciones;
+  } catch (err) {
+    relacionesSugeridas = [];
+  }
+}
+
+async function cargarPersonas() {
+  try {
+    personas = (await llamarApi('/api/personas')).personas;
+    ocultarMensaje($('mensaje-personas'));
+  } catch (err) {
+    mostrarMensaje($('mensaje-personas'), err.message);
+  }
+}
+
+async function cargarCitas() {
+  ocultarMensaje($('mensaje-lista'));
+  $('cargando-lista').classList.remove('oculto');
+  try {
+    citas = (await llamarApi('/api/citas')).citas || [];
+  } catch (err) {
+    mostrarMensaje($('mensaje-lista'), err.message);
+  } finally {
+    $('cargando-lista').classList.add('oculto');
+  }
+}
+
+async function cargarLugaresGuardados() {
+  try {
+    lugaresGuardados = (await llamarApi('/api/lugares-guardados')).lugares;
+  } catch (err) {
+    lugaresGuardados = [];
+  }
+}
+
+function renderizarTodo() {
+  renderizarInicio();
+  renderizarCitas();
+  renderizarPersonas();
+}
+
+// -----------------------------------------------------------------------
+// Inicio
+// -----------------------------------------------------------------------
+function renderizarInicio() {
+  renderizarProximaCita();
+  renderizarFechasRecurrentes();
+  renderizarHaceTiempo();
+  renderizarNumeros();
+}
+
+function renderizarProximaCita() {
+  const el = $('proxima-cita');
+  const cita = citasProximas()[0];
+
+  if (!cita) {
+    el.innerHTML = `
+      <div class="postal postal-vacia">
+        <div>
+          <h2>No tienes citas por delante</h2>
+          <p class="texto-suave">Cuando planees una, aquí verás cuánto falta, a dónde van y qué clima esperar.</p>
+        </div>
+        <button type="button" class="btn btn-principal" data-accion="nueva-cita">+ Planear una cita</button>
+      </div>`;
+    return;
+  }
+
+  const fecha = deISO(cita.fecha);
+  const persona = cita.personaId ? buscarPersonaPorId(cita.personaId) : null;
+  const lugar = cita.lugarSugerido || cita.ubicacion;
+  const dias = diasHasta(cita.fecha);
+  const hora = cita.hora ? (() => { const [h, m] = cita.hora.split(':').map(Number); return formatearHora12h(h, m); })() : null;
+
+  el.innerHTML = `
+    <article class="postal" data-cita-id="${cita.id}">
+      <div class="postal-sello" aria-hidden="true">
+        <span class="sello-dia">${fecha.getDate()}</span>
+        <span class="sello-mes">${MESES[fecha.getMonth()]}</span>
+      </div>
+      <div class="postal-cuerpo">
+        <p class="postal-cuenta">${textoDiasHasta(dias)}${hora ? `, ${hora}` : ''}</p>
+        <h2 class="postal-titulo">${escaparHtml(cita.titulo)}</h2>
+        <p class="postal-detalle">
+          ${persona ? `Con ${escaparHtml(persona.nombre)} en ` : 'En '}${escaparHtml(lugar.nombre)}
+        </p>
+        <a class="cita-calendario" href="${generarUrlGoogleCalendar(cita, persona)}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
+        <div class="cita-clima" data-clima-id="${cita.id}">Cargando clima...</div>
+      </div>
+    </article>`;
+  cargarClimaDeCita(cita.id, el.querySelector('.postal'));
+}
+
+/** Cumpleaños y fechas importantes de los proximos 30 dias. */
+function fechasRecurrentesProximas() {
+  const cumpleanos = [];
+  const importantes = [];
+  personas.forEach((persona) => {
+    if (persona.cumpleanos) {
+      const fecha = siguienteOcurrencia(persona.cumpleanos);
+      const dias = diasHasta(fecha);
+      if (dias <= 30) cumpleanos.push({ persona, fecha, dias, nombre: 'Cumpleaños' });
+    }
+    (persona.fechasImportantes || []).forEach((f) => {
+      const fecha = siguienteOcurrencia(f.fecha);
+      const dias = diasHasta(fecha);
+      if (dias <= 30) importantes.push({ persona, fecha, dias, nombre: f.nombre });
+    });
+  });
+  const porDias = (a, b) => a.dias - b.dias;
+  return { cumpleanos: cumpleanos.sort(porDias), importantes: importantes.sort(porDias) };
+}
+
+function filaFechaRecurrente(item, conNombreEvento) {
+  return `
+    <div class="fila-item">
+      ${avatarPersona(item.persona)}
+      <div class="fila-texto">
+        <strong>${conNombreEvento ? `${escaparHtml(item.nombre)} con ${escaparHtml(item.persona.nombre)}` : escaparHtml(item.persona.nombre)}</strong>
+        <span>${formatearDiaMes(item.fecha)}, ${textoDiasHasta(item.dias).toLowerCase()}</span>
+      </div>
+      <button type="button" class="btn btn-terciario" data-planear-persona="${item.persona.id}" data-planear-fecha="${item.fecha}">Planear algo</button>
+    </div>`;
+}
+
+function renderizarFechasRecurrentes() {
+  const { cumpleanos, importantes } = fechasRecurrentesProximas();
+  $('lista-cumpleanos').innerHTML = cumpleanos.length
+    ? cumpleanos.map((i) => filaFechaRecurrente(i, false)).join('')
+    : `<p class="vacio-chico">Ningún cumpleaños en los próximos 30 días.${personas.length ? '' : ' Agrega personas con su cumpleaños para verlos aquí.'}</p>`;
+  $('lista-fechas-importantes').innerHTML = importantes.length
+    ? importantes.map((i) => filaFechaRecurrente(i, true)).join('')
+    : '<p class="vacio-chico">Nada en los próximos 30 días. Agrega aniversarios u otras fechas en el perfil de cada persona.</p>';
+}
+
+function renderizarHaceTiempo() {
+  const el = $('lista-hace-tiempo');
+  if (!personas.length) {
+    el.innerHTML = '<p class="vacio-chico">Agrega a las personas con quienes sales y aquí te recordaremos cuando haga tiempo que no planean nada.</p>';
+    return;
+  }
+  const hoyTexto = hoyISO();
+  const filas = personas
+    .map((persona) => {
+      const suyas = citas.filter((c) => c.personaId === persona.id);
+      if (suyas.some((c) => c.fecha >= hoyTexto)) return null; // ya tiene algo planeado
+      const pasadas = suyas.map((c) => c.fecha).sort();
+      const ultima = pasadas[pasadas.length - 1] || null;
+      const dias = ultima ? -diasHasta(ultima) : null;
+      if (dias !== null && dias < 30) return null;
+      return { persona, dias };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.dias ?? Infinity) - (a.dias ?? Infinity))
+    .slice(0, 4);
+
+  el.innerHTML = filas.length
+    ? filas.map(({ persona, dias }) => `
+        <div class="fila-item">
+          ${avatarPersona(persona)}
+          <div class="fila-texto">
+            <strong>${escaparHtml(persona.nombre)}</strong>
+            <span>${dias === null ? 'Aún no han planeado nada juntos' : `Hace ${dias} días de su última cita`}</span>
+          </div>
+          <button type="button" class="btn btn-terciario" data-planear-persona="${persona.id}">Planear algo</button>
+        </div>`).join('')
+    : '<p class="vacio-chico">Vas al día: tienes algo reciente o planeado con todas tus personas.</p>';
+}
+
+function renderizarNumeros() {
+  const mesActual = hoyISO().slice(0, 7);
+  const delMes = citas.filter((c) => c.fecha.startsWith(mesActual)).length;
+  const conteo = {};
+  citas.forEach((c) => { conteo[c.tipo] = (conteo[c.tipo] || 0) + 1; });
+  const favorito = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0];
+
+  const datos = [
+    ['Citas este mes', delMes],
+    ['Citas en total', citas.length],
+    ['Personas', personas.length],
+    ['Plan favorito', favorito ? etiquetaTipo(favorito[0]) : 'Todavía ninguno']
+  ];
+  $('tus-numeros').innerHTML = datos.map(([etiqueta, valor]) => `<div><dt>${etiqueta}</dt><dd>${escaparHtml(valor)}</dd></div>`).join('');
+}
+
+// "Planear algo" desde Inicio o desde el perfil de una persona
+document.addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-planear-persona]');
+  if (!boton) return;
+  cerrarLateral();
+  abrirAsistente({ personaId: boton.dataset.planearPersona, fecha: boton.dataset.planearFecha || null });
+});
+
+// -----------------------------------------------------------------------
+// Citas (linea de tiempo)
+// -----------------------------------------------------------------------
+document.querySelectorAll('.segmento').forEach((s) => {
+  s.addEventListener('click', () => {
+    filtroCitas = s.dataset.filtro;
+    document.querySelectorAll('.segmento').forEach((x) => x.classList.toggle('activo', x === s));
+    renderizarCitas();
+  });
+});
+
+function renderizarCitas() {
+  const lista = filtroCitas === 'proximas' ? citasProximas() : citasPasadas();
+  const contenedor = $('linea-tiempo');
+  contenedor.innerHTML = '';
+  const vacio = $('sin-citas');
+  vacio.classList.toggle('oculto', lista.length > 0);
+  if (!lista.length) {
+    vacio.innerHTML = filtroCitas === 'proximas'
+      ? '<p>No tienes citas por delante.</p><button type="button" class="btn btn-secundario" data-accion="nueva-cita">+ Planear una cita</button>'
+      : '<p>Todavía no tienes citas pasadas. Aquí quedará el historial de lo que han vivido.</p>';
+    return;
+  }
+  lista.forEach((cita) => contenedor.appendChild(crearTarjetaCita(cita)));
 }
 
 /** Compara solo mes y dia (ignora el año) entre el cumpleanos y la fecha de la cita. */
@@ -672,7 +512,7 @@ function esCumpleanos(persona, fecha) {
   return persona.cumpleanos.slice(5) === fecha.slice(5);
 }
 
-function renderizarCita(cita) {
+function crearTarjetaCita(cita) {
   const card = document.createElement('article');
   card.className = 'cita-card';
   card.dataset.id = cita.id;
@@ -684,10 +524,9 @@ function renderizarCita(cita) {
 
   const persona = cita.personaId ? buscarPersonaPorId(cita.personaId) : null;
   const conQuienTexto = cita.personaId
-    ? ` · con ${persona ? escaparHtml(persona.nombre) : 'alguien (perfil eliminado)'}`
+    ? `, con ${persona ? escaparHtml(persona.nombre) : 'alguien (perfil eliminado)'}`
     : '';
   const esSuCumpleanos = esCumpleanos(persona, cita.fecha);
-  const enlaceCalendario = generarUrlGoogleCalendar(cita, persona);
 
   card.innerHTML = `
     <div class="cita-header">
@@ -695,18 +534,30 @@ function renderizarCita(cita) {
         <span class="icono-tipo">${ICONOS_TIPO[cita.tipo] || ICONOS_TIPO.otro}</span>
         <h3>${escaparHtml(cita.titulo)}</h3>
       </div>
-      <button class="btn-eliminar" data-id="${cita.id}">Eliminar</button>
+      <button type="button" class="btn-eliminar">Eliminar</button>
     </div>
     <div class="cita-meta">${formatearFechaHora(cita)}${conQuienTexto}</div>
     ${esSuCumpleanos ? `<div class="cita-cumpleanos">🎂 ¡Es el cumpleaños de ${escaparHtml(persona.nombre)}!</div>` : ''}
     <div class="cita-lugar">${enlaceLugar}</div>
-    <a class="cita-calendario" href="${enlaceCalendario}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
+    <a class="cita-calendario" href="${generarUrlGoogleCalendar(cita, persona)}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
     <div class="cita-clima" data-clima-id="${cita.id}">Cargando clima...</div>
   `;
 
-  elLineaTiempo.appendChild(card);
-  card.querySelector('.btn-eliminar').addEventListener('click', () => eliminarCita(cita.id));
+  const botonEliminar = card.querySelector('.btn-eliminar');
+  botonEliminar.addEventListener('click', () => {
+    if (botonEliminar.dataset.confirmar) {
+      eliminarCita(cita.id);
+    } else {
+      botonEliminar.dataset.confirmar = '1';
+      botonEliminar.textContent = '¿Eliminar? Toca de nuevo';
+      setTimeout(() => {
+        delete botonEliminar.dataset.confirmar;
+        botonEliminar.textContent = 'Eliminar';
+      }, 4000);
+    }
+  });
   cargarClimaDeCita(cita.id, card);
+  return card;
 }
 
 async function cargarClimaDeCita(id, card) {
@@ -724,7 +575,7 @@ async function cargarClimaDeCita(id, card) {
     el.classList.add('clima-error');
     el.innerHTML = `
       ${ICONOS_CLIMA.error}
-      <span class="texto-clima">${escaparHtml(err.message)}<br><button class="reintentar">Reintentar</button></span>
+      <span class="texto-clima">${escaparHtml(err.message)}<br><button type="button" class="reintentar">Reintentar</button></span>
     `;
     el.querySelector('.reintentar').addEventListener('click', () => cargarClimaDeCita(id, card));
   }
@@ -742,94 +593,948 @@ function renderizarClimaEnTarjeta(el, card, resultado) {
   card.classList.add(`punto-${categoria}`);
 
   const etiqueta = estado === 'historico' ? 'Clima registrado' : 'Pronóstico';
-  const precipitacion = datos.precipitacion > 0 ? ` · ${datos.precipitacion} mm de lluvia` : '';
+  const precipitacion = datos.precipitacion > 0 ? `, ${datos.precipitacion} mm de lluvia` : '';
   const consejo = estado === 'pronostico' ? generarConsejo(datos, categoria) : '';
 
   el.innerHTML = `
     ${ICONOS_CLIMA[categoria]}
     <span class="texto-clima">
       <span class="etiqueta">${etiqueta}</span>
-      ${describirClima(datos.codigoClima)} · Máx ${Math.round(datos.temperaturaMax)}° / Mín ${Math.round(datos.temperaturaMin)}°${precipitacion}
+      ${describirClima(datos.codigoClima)}, máx ${Math.round(datos.temperaturaMax)}° / mín ${Math.round(datos.temperaturaMin)}°${precipitacion}
       ${consejo ? `<span class="consejo">${escaparHtml(consejo)}</span>` : ''}
     </span>
   `;
 }
 
 async function eliminarCita(id) {
-  ocultarMensaje(elMensajeLista);
+  ocultarMensaje($('mensaje-lista'));
   try {
     await llamarApi(`/api/citas/${id}`, { method: 'DELETE' });
-    cargarCitas();
+    citas = citas.filter((c) => c.id !== id);
+    renderizarTodo();
+    avisar('Cita eliminada');
   } catch (err) {
-    mostrarMensaje(elMensajeLista, err.message);
+    mostrarMensaje($('mensaje-lista'), err.message);
   }
 }
 
 // -----------------------------------------------------------------------
-// Ideas y que hacer (tops curados de blogs, via SerpApi en el backend)
+// Personas: tarjetas en la pestaña Personas
 // -----------------------------------------------------------------------
-let tabActivaTops = null;
+function renderizarPersonas() {
+  const contenedor = $('lista-personas');
+  $('sin-personas').classList.toggle('oculto', personas.length > 0);
+  contenedor.innerHTML = personas.map((persona) => {
+    const cantidad = citas.filter((c) => c.personaId === persona.id).length;
+    const proximoCumple = persona.cumpleanos ? siguienteOcurrencia(persona.cumpleanos) : null;
+    return `
+      <button type="button" class="persona-card" data-ver-persona="${persona.id}">
+        ${avatarPersona(persona, 'avatar-persona avatar-grande')}
+        <span class="persona-card-texto">
+          <strong>${escaparHtml(persona.nombre)}</strong>
+          <span class="persona-relacion">${escaparHtml(persona.relacion)}</span>
+          <span class="persona-dato">${cantidad === 1 ? '1 cita' : `${cantidad} citas`}${proximoCumple ? `, cumple el ${formatearDiaMes(proximoCumple)}` : ''}</span>
+        </span>
+      </button>`;
+  }).join('');
+}
 
-const elTabsTops = document.getElementById('tabs-tops');
-const elTopsActualizado = document.getElementById('tops-actualizado');
-const elTopsCargando = document.getElementById('tops-cargando');
-const elTopsMensaje = document.getElementById('tops-mensaje');
-const elListaTops = document.getElementById('lista-tops');
+document.addEventListener('click', (evento) => {
+  const card = evento.target.closest('[data-ver-persona]');
+  if (card) verPersona(card.dataset.verPersona);
+});
 
-async function cargarCategoriasTops() {
-  try {
-    const data = await llamarApi('/api/tops-categorias');
-    renderizarTabsTops(data.categorias);
-    if (data.categorias.length > 0) {
-      seleccionarTabTops(data.categorias[0].id);
+// -----------------------------------------------------------------------
+// Panel lateral: ver, crear y editar una persona
+// -----------------------------------------------------------------------
+let editandoPersonaId = null;
+let alGuardarPersona = null; // callback opcional (ej: desde el asistente)
+let fechasEnFormulario = [];
+let elementoConFocoPrevio = null;
+
+function abrirLateral(titulo) {
+  elementoConFocoPrevio = document.activeElement;
+  $('lateral-titulo').textContent = titulo;
+  $('panel-lateral').classList.remove('oculto');
+  document.body.classList.add('sin-scroll');
+}
+
+function cerrarLateral() {
+  if ($('panel-lateral').classList.contains('oculto')) return;
+  $('panel-lateral').classList.add('oculto');
+  alGuardarPersona = null;
+  if ($('asistente').classList.contains('oculto')) document.body.classList.remove('sin-scroll');
+  if (elementoConFocoPrevio && elementoConFocoPrevio.focus) elementoConFocoPrevio.focus();
+}
+
+function verPersona(id) {
+  const persona = buscarPersonaPorId(id);
+  if (!persona) return;
+  const suyas = ordenarCitas(citas.filter((c) => c.personaId === id)).reverse();
+  const datos = [
+    persona.cumpleanos ? ['Cumpleaños', formatearDiaMes(persona.cumpleanos)] : null,
+    persona.comidaFavorita ? ['Comida favorita', escaparHtml(persona.comidaFavorita)] : null,
+    persona.correo ? ['Correo', escaparHtml(persona.correo)] : null
+  ].filter(Boolean);
+  const fechas = persona.fechasImportantes || [];
+
+  $('vista-persona').innerHTML = `
+    <div class="vista-encabezado">
+      ${avatarPersona(persona, 'avatar-persona avatar-grande')}
+      <div>
+        <p class="vista-nombre">${escaparHtml(persona.nombre)}</p>
+        <span class="persona-relacion">${escaparHtml(persona.relacion)}</span>
+      </div>
+    </div>
+    <button type="button" class="btn btn-principal" data-planear-persona="${persona.id}">Planear una cita con ${escaparHtml(persona.nombre)}</button>
+
+    ${datos.length ? `<dl class="vista-datos">${datos.map(([e, v]) => `<div><dt>${e}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}
+    ${persona.notas ? `<p class="vista-notas">${escaparHtml(persona.notas)}</p>` : ''}
+
+    <h3>Fechas importantes</h3>
+    ${fechas.length
+      ? `<ul class="vista-lista">${fechas.map((f) => `<li><strong>${escaparHtml(f.nombre)}</strong><span>${formatearDiaMes(f.fecha)}</span></li>`).join('')}</ul>`
+      : '<p class="vacio-chico">Sin fechas guardadas. Agrégalas al editar.</p>'}
+
+    <h3>Sus citas</h3>
+    ${suyas.length
+      ? `<ul class="vista-lista">${suyas.map((c) => `<li><strong>${escaparHtml(c.titulo)}</strong><span>${formatearFechaLarga(c.fecha)}</span></li>`).join('')}</ul>`
+      : '<p class="vacio-chico">Todavía no han planeado nada juntos.</p>'}
+
+    <div class="lateral-acciones">
+      <button type="button" class="btn-eliminar" id="btn-eliminar-persona">Eliminar</button>
+      <button type="button" class="btn btn-secundario" id="btn-editar-persona">Editar</button>
+    </div>
+    <div id="mensaje-vista-persona" class="mensaje oculto" role="alert"></div>
+  `;
+  $('form-persona').classList.add('oculto');
+  $('vista-persona').classList.remove('oculto');
+  abrirLateral('Persona');
+
+  $('btn-editar-persona').addEventListener('click', () => abrirFormPersona(persona));
+  const botonEliminar = $('btn-eliminar-persona');
+  botonEliminar.addEventListener('click', async () => {
+    if (!botonEliminar.dataset.confirmar) {
+      botonEliminar.dataset.confirmar = '1';
+      botonEliminar.textContent = '¿Eliminar? Toca de nuevo';
+      return;
     }
-  } catch (err) {
-    // Si falla, la seccion simplemente queda vacia; no interrumpe el resto de la app.
-  }
+    try {
+      await llamarApi(`/api/personas/${persona.id}`, { method: 'DELETE' });
+      personas = personas.filter((p) => p.id !== persona.id);
+      cerrarLateral();
+      renderizarTodo();
+      avisar(`${persona.nombre} se eliminó`);
+    } catch (err) {
+      mostrarMensaje($('mensaje-vista-persona'), err.message);
+    }
+  });
+  $('lateral-titulo').focus?.();
 }
 
-function renderizarTabsTops(categorias) {
-  elTabsTops.innerHTML = categorias
-    .map((c) => `<button type="button" class="tab-top" data-id="${c.id}">${escaparHtml(c.etiqueta)}</button>`)
-    .join('');
-  elTabsTops.querySelectorAll('.tab-top').forEach((boton) => {
-    boton.addEventListener('click', () => seleccionarTabTops(boton.dataset.id));
+// --- Selector de dia + mes (+ año opcional), reutilizable ---
+function htmlSelectorDiaMes(prefijo, iso) {
+  let dia = '';
+  let mes = '';
+  let anio = '';
+  if (iso) {
+    const [a, m, d] = iso.split('-').map(Number);
+    dia = d; mes = m; anio = a === ANIO_DESCONOCIDO ? '' : a;
+  }
+  const opcionesDia = ['<option value="">Día</option>']
+    .concat(Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${dia === i + 1 ? 'selected' : ''}>${i + 1}</option>`)).join('');
+  const opcionesMes = ['<option value="">Mes</option>']
+    .concat(MESES.map((nombre, i) => `<option value="${i + 1}" ${mes === i + 1 ? 'selected' : ''}>${nombre}</option>`)).join('');
+  return `
+    <select data-parte="dia" aria-label="Día" id="${prefijo}-dia">${opcionesDia}</select>
+    <select data-parte="mes" aria-label="Mes" id="${prefijo}-mes">${opcionesMes}</select>
+    <input data-parte="anio" type="number" inputmode="numeric" min="1900" max="2100" placeholder="Año (opcional)" aria-label="Año (opcional)" value="${anio}" />`;
+}
+
+/** Devuelve { iso } si es valida, { vacio: true } si no se lleno, o { error }. */
+function leerSelectorDiaMes(contenedor) {
+  const dia = Number(contenedor.querySelector('[data-parte="dia"]').value);
+  const mes = Number(contenedor.querySelector('[data-parte="mes"]').value);
+  const anioTexto = contenedor.querySelector('[data-parte="anio"]').value.trim();
+  if (!dia && !mes && !anioTexto) return { vacio: true };
+  if (!dia || !mes) return { error: 'elige el día y el mes' };
+  const anio = anioTexto ? Number(anioTexto) : ANIO_DESCONOCIDO;
+  if (!Number.isInteger(anio) || anio < 1900 || anio > 2100) return { error: 'el año no es válido' };
+  const fecha = new Date(anio, mes - 1, dia);
+  if (fecha.getMonth() !== mes - 1) return { error: `el ${dia} de ${MESES[mes - 1]} no existe` };
+  return { iso: `${anio}-${conCero(mes)}-${conCero(dia)}` };
+}
+
+function renderizarOpcionesRelacion(relacionActual) {
+  const esSugerida = !relacionActual || relacionesSugeridas.includes(relacionActual);
+  $('opciones-relacion').innerHTML = relacionesSugeridas
+    .map((r) => `<button type="button" class="chip ${r === relacionActual ? 'activo' : ''}" data-relacion="${escaparHtml(r)}" aria-pressed="${r === relacionActual}">${escaparHtml(r)}</button>`)
+    .join('') +
+    `<button type="button" class="chip ${!esSugerida ? 'activo' : ''}" data-relacion="__otra__" aria-pressed="${!esSugerida}">Otra…</button>`;
+  const inputOtra = $('persona-relacion-otra');
+  inputOtra.classList.toggle('oculto', esSugerida);
+  inputOtra.value = esSugerida ? '' : relacionActual;
+}
+
+$('opciones-relacion').addEventListener('click', (evento) => {
+  const chip = evento.target.closest('[data-relacion]');
+  if (!chip) return;
+  $('opciones-relacion').querySelectorAll('.chip').forEach((c) => {
+    c.classList.toggle('activo', c === chip);
+    c.setAttribute('aria-pressed', String(c === chip));
+  });
+  const esOtra = chip.dataset.relacion === '__otra__';
+  $('persona-relacion-otra').classList.toggle('oculto', !esOtra);
+  if (esOtra) $('persona-relacion-otra').focus();
+});
+
+function relacionElegida() {
+  const chip = $('opciones-relacion').querySelector('.chip.activo');
+  if (!chip) return '';
+  return chip.dataset.relacion === '__otra__' ? $('persona-relacion-otra').value.trim() : chip.dataset.relacion;
+}
+
+function renderizarFechasFormulario() {
+  $('lista-fechas-form').innerHTML = fechasEnFormulario.map((f, i) => `
+    <div class="fecha-form" data-indice="${i}">
+      <input type="text" data-parte="nombre" placeholder="Ej: Aniversario" maxlength="40" value="${escaparHtml(f.nombre)}" aria-label="Nombre de la fecha" />
+      <div class="selector-dia-mes">${htmlSelectorDiaMes(`fecha-${i}`, f.fecha)}</div>
+      <button type="button" class="btn-icono" data-quitar-fecha="${i}" aria-label="Quitar esta fecha">✕</button>
+    </div>`).join('');
+}
+
+/** Guarda lo escrito en las filas antes de volver a pintarlas. */
+function sincronizarFechasFormulario() {
+  $('lista-fechas-form').querySelectorAll('.fecha-form').forEach((fila) => {
+    const i = Number(fila.dataset.indice);
+    const lectura = leerSelectorDiaMes(fila.querySelector('.selector-dia-mes'));
+    fechasEnFormulario[i] = {
+      nombre: fila.querySelector('[data-parte="nombre"]').value,
+      fecha: lectura.iso || null
+    };
   });
 }
 
+$('btn-agregar-fecha').addEventListener('click', () => {
+  sincronizarFechasFormulario();
+  if (fechasEnFormulario.length >= 10) return;
+  fechasEnFormulario.push({ nombre: '', fecha: null });
+  renderizarFechasFormulario();
+  const filas = $('lista-fechas-form').querySelectorAll('[data-parte="nombre"]');
+  filas[filas.length - 1].focus();
+});
+
+$('lista-fechas-form').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-quitar-fecha]');
+  if (!boton) return;
+  sincronizarFechasFormulario();
+  fechasEnFormulario.splice(Number(boton.dataset.quitarFecha), 1);
+  renderizarFechasFormulario();
+});
+
+/**
+ * Abre el formulario de persona. Sin argumento: persona nueva.
+ * `opciones.alGuardar(persona)` se llama al guardar (lo usa el asistente).
+ */
+function abrirFormPersona(persona = null, opciones = {}) {
+  editandoPersonaId = persona ? persona.id : null;
+  alGuardarPersona = opciones.alGuardar || null;
+
+  $('persona-nombre').value = persona ? persona.nombre : '';
+  renderizarOpcionesRelacion(persona ? persona.relacion : null);
+  $('persona-cumpleanos').innerHTML = htmlSelectorDiaMes('cumple', persona ? persona.cumpleanos : null);
+  fechasEnFormulario = persona ? (persona.fechasImportantes || []).map((f) => ({ ...f })) : [];
+  renderizarFechasFormulario();
+  $('persona-comida').value = persona ? persona.comidaFavorita || '' : '';
+  $('persona-correo').value = persona ? persona.correo || '' : '';
+  $('persona-notas').value = persona ? persona.notas || '' : '';
+  $('btn-guardar-persona').textContent = persona ? 'Guardar cambios' : 'Guardar persona';
+  ocultarMensaje($('mensaje-persona'));
+
+  $('vista-persona').classList.add('oculto');
+  $('form-persona').classList.remove('oculto');
+  const callback = alGuardarPersona;
+  abrirLateral(persona ? `Editar a ${persona.nombre}` : 'Nueva persona');
+  alGuardarPersona = callback;
+  setTimeout(() => $('persona-nombre').focus(), 50);
+}
+
+$('form-persona').addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  const mensaje = $('mensaje-persona');
+  ocultarMensaje(mensaje);
+  sincronizarFechasFormulario();
+
+  const nombre = $('persona-nombre').value.trim();
+  const relacion = relacionElegida();
+  const correo = $('persona-correo').value.trim() || null;
+  const cumple = leerSelectorDiaMes($('persona-cumpleanos'));
+
+  if (nombre.length < 2) { mostrarMensaje(mensaje, 'Escribe un nombre de al menos 2 letras.'); return; }
+  if (!relacion || relacion.length < 2) { mostrarMensaje(mensaje, 'Elige la relación o escribe la tuya.'); return; }
+  if (cumple.error) { mostrarMensaje(mensaje, `Cumpleaños: ${cumple.error}.`); return; }
+  if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mostrarMensaje(mensaje, 'El correo no tiene un formato válido.'); return; }
+
+  const fechasImportantes = [];
+  for (const [i, f] of fechasEnFormulario.entries()) {
+    const fila = $('lista-fechas-form').querySelector(`[data-indice="${i}"] .selector-dia-mes`);
+    const lectura = leerSelectorDiaMes(fila);
+    const nombreFecha = (f.nombre || '').trim();
+    if (!nombreFecha && lectura.vacio) continue; // fila vacia: se ignora
+    if (nombreFecha.length < 2) { mostrarMensaje(mensaje, 'Cada fecha importante necesita un nombre, por ejemplo "Aniversario".'); return; }
+    if (lectura.vacio || lectura.error) { mostrarMensaje(mensaje, `${nombreFecha}: ${lectura.error || 'elige el día y el mes'}.`); return; }
+    fechasImportantes.push({ nombre: nombreFecha, fecha: lectura.iso });
+  }
+
+  const payload = {
+    nombre,
+    relacion,
+    cumpleanos: cumple.iso || null,
+    comidaFavorita: $('persona-comida').value.trim() || null,
+    correo,
+    notas: $('persona-notas').value.trim() || null,
+    fechasImportantes
+  };
+
+  const boton = $('btn-guardar-persona');
+  boton.disabled = true;
+  try {
+    const data = editandoPersonaId
+      ? await enviarJson(`/api/personas/${editandoPersonaId}`, 'PUT', payload)
+      : await enviarJson('/api/personas', 'POST', payload);
+    await cargarPersonas();
+    renderizarTodo();
+    const callback = alGuardarPersona;
+    const eraEdicion = Boolean(editandoPersonaId);
+    cerrarLateral();
+    avisar(eraEdicion ? 'Cambios guardados' : `${data.persona.nombre} se agregó a tus personas`);
+    if (callback) callback(data.persona);
+    else if (eraEdicion) verPersona(data.persona.id);
+  } catch (err) {
+    mostrarMensaje(mensaje, err.message);
+  } finally {
+    boton.disabled = false;
+  }
+});
+
+// -----------------------------------------------------------------------
+// Asistente de nueva cita (paso a paso)
+// -----------------------------------------------------------------------
+const PASOS = [
+  { nombre: 'Qué', valido: () => Boolean(borrador.tipo), pista: 'Elige un tipo de plan para seguir' },
+  { nombre: 'Cuándo', valido: () => Boolean(borrador.fecha), pista: 'Elige una fecha para seguir' },
+  { nombre: 'Con quién', valido: () => true, pista: '' },
+  { nombre: 'Dónde', valido: () => Boolean(borrador.ubicacion), pista: 'Elige un lugar para seguir' },
+  { nombre: 'Detalles', valido: () => true, pista: '' }
+];
+
+const FRANJAS = [
+  { id: 'manana', etiqueta: 'Mañana', desde: 6 * 60, hasta: 11 * 60 + 30 },
+  { id: 'tarde', etiqueta: 'Tarde', desde: 12 * 60, hasta: 17 * 60 + 30 },
+  { id: 'noche', etiqueta: 'Noche', desde: 18 * 60, hasta: 23 * 60 + 30 }
+];
+
+let borrador = null;
+let pasoActual = 1;
+let mesCalendario = null; // Date del primer dia del mes visible
+let franjaActiva = null;
+let lugaresSugeridos = [];
+let claveSugerenciaIA = null;
+
+function borradorVacio() {
+  return { tipo: null, fecha: null, hora: null, personaId: null, ubicacion: null, lugarElegido: null };
+}
+
+function abrirAsistente(prefill = {}) {
+  borrador = { ...borradorVacio(), ...prefill };
+  if (borrador.personaId && !buscarPersonaPorId(borrador.personaId)) borrador.personaId = null;
+  pasoActual = 1;
+  const base = borrador.fecha ? deISO(borrador.fecha) : hoy();
+  mesCalendario = new Date(base.getFullYear(), base.getMonth(), 1);
+  franjaActiva = null;
+  lugaresSugeridos = [];
+  claveSugerenciaIA = null;
+  $('cita-titulo').value = '';
+  $('buscar-lugar').value = '';
+  $('lista-resultados-ubicacion').innerHTML = '';
+  $('modo-coordenadas').classList.add('oculto');
+  $('lista-lugares').innerHTML = '';
+  ocultarSugerenciaIA();
+  ['mensaje-form', 'mensaje-donde', 'lugares-mensaje'].forEach((id) => ocultarMensaje($(id)));
+
+  elementoConFocoPrevioAsistente = document.activeElement;
+  $('asistente').classList.remove('oculto');
+  document.body.classList.add('sin-scroll');
+  irAPaso(1);
+}
+
+let elementoConFocoPrevioAsistente = null;
+function cerrarAsistente() {
+  $('asistente').classList.add('oculto');
+  document.body.classList.remove('sin-scroll');
+  if (elementoConFocoPrevioAsistente && elementoConFocoPrevioAsistente.focus) elementoConFocoPrevioAsistente.focus();
+}
+
+function irAPaso(numero) {
+  pasoActual = numero;
+  document.querySelectorAll('.paso').forEach((p) => p.classList.toggle('activo', Number(p.dataset.paso) === numero));
+  $('asistente-progreso-texto').textContent = `Paso ${numero} de ${PASOS.length}`;
+  $('asistente-titulo').textContent = PASOS[numero - 1].nombre;
+  $('asistente-barra').style.width = `${(numero / PASOS.length) * 100}%`;
+  $('btn-atras').classList.toggle('invisible', numero === 1);
+  $('btn-siguiente').textContent = numero === PASOS.length ? 'Guardar cita' : 'Siguiente';
+  $('btn-siguiente').disabled = false;
+  $('btn-siguiente').classList.replace('btn-secundario', 'btn-principal');
+
+  if (numero === 1) renderizarPasoQue();
+  if (numero === 2) renderizarPasoCuando();
+  if (numero === 3) renderizarPasoConQuien();
+  if (numero === 4) renderizarPasoDonde();
+  if (numero === 5) renderizarPasoDetalles();
+  actualizarPie();
+  document.querySelector('.asistente-cuerpo').scrollTop = 0;
+}
+
+function actualizarPie() {
+  const paso = PASOS[pasoActual - 1];
+  const valido = paso.valido();
+  $('btn-siguiente').disabled = !valido;
+  $('asistente-pista').textContent = valido ? '' : paso.pista;
+}
+
+$('btn-atras').addEventListener('click', () => { if (typeof pasoActual === 'number' && pasoActual > 1) irAPaso(pasoActual - 1); });
+$('btn-siguiente').addEventListener('click', () => {
+  if (pasoActual === 'listo') { cerrarAsistente(); return; }
+  if (!PASOS[pasoActual - 1].valido()) return;
+  if (pasoActual < PASOS.length) irAPaso(pasoActual + 1);
+  else guardarCita();
+});
+
+// --- Paso 1: Que ---
+function renderizarPasoQue() {
+  $('opciones-tipo').innerHTML = tiposCita.map((t) => `
+    <button type="button" role="radio" class="opcion-tipo ${borrador.tipo === t.id ? 'activo' : ''}" aria-checked="${borrador.tipo === t.id}" data-tipo="${t.id}">
+      <span class="opcion-icono">${ICONOS_TIPO[t.id] || ICONOS_TIPO.otro}</span>
+      <span>${escaparHtml(t.etiqueta)}</span>
+    </button>`).join('');
+}
+
+$('opciones-tipo').addEventListener('click', (evento) => {
+  const opcion = evento.target.closest('[data-tipo]');
+  if (!opcion) return;
+  borrador.tipo = opcion.dataset.tipo;
+  renderizarPasoQue();
+  actualizarPie();
+});
+
+// --- Paso 2: Cuando (atajos + calendario + hora) ---
+function proximoSabado(desde) {
+  const d = new Date(desde);
+  const diasHastaSabado = (6 - d.getDay() + 7) % 7;
+  return sumarDias(d, diasHastaSabado);
+}
+
+function atajosFecha() {
+  const h = hoy();
+  const esteSabado = proximoSabado(h);
+  const atajos = [
+    { etiqueta: 'Hoy', iso: aISO(h) },
+    { etiqueta: 'Mañana', iso: aISO(sumarDias(h, 1)) },
+    { etiqueta: 'Este sábado', iso: aISO(esteSabado) },
+    { etiqueta: 'Próximo sábado', iso: aISO(sumarDias(esteSabado, 7)) }
+  ];
+  // Si hoy o mañana ya es sabado, ese atajo sobra.
+  return atajos.filter((a, i) => atajos.findIndex((b) => b.iso === a.iso) === i);
+}
+
+/** Dias marcados en el calendario: cumpleaños y fechas importantes. */
+function marcasDelCalendario() {
+  const marcas = {};
+  const agregar = (iso, texto) => {
+    const clave = iso.slice(5);
+    (marcas[clave] = marcas[clave] || []).push(texto);
+  };
+  personas.forEach((p) => {
+    if (p.cumpleanos) agregar(p.cumpleanos, `Cumpleaños de ${p.nombre}`);
+    (p.fechasImportantes || []).forEach((f) => agregar(f.fecha, `${f.nombre} con ${p.nombre}`));
+  });
+  return marcas;
+}
+
+function renderizarPasoCuando() {
+  $('atajos-fecha').innerHTML = atajosFecha().map((a) => `
+    <button type="button" class="chip ${borrador.fecha === a.iso ? 'activo' : ''}" data-fecha="${a.iso}" aria-pressed="${borrador.fecha === a.iso}">${a.etiqueta}</button>`).join('');
+  renderizarCalendario();
+  renderizarHoras();
+}
+
+function renderizarCalendario() {
+  const marcas = marcasDelCalendario();
+  const anio = mesCalendario.getFullYear();
+  const mes = mesCalendario.getMonth();
+  const hoyTexto = hoyISO();
+  const primerMesPermitido = new Date(hoy().getFullYear(), hoy().getMonth(), 1);
+  const puedeRetroceder = mesCalendario > primerMesPermitido;
+
+  // Lunes = 0 ... domingo = 6
+  const desfase = (new Date(anio, mes, 1).getDay() + 6) % 7;
+  const diasEnMes = new Date(anio, mes + 1, 0).getDate();
+  let celdas = '';
+  for (let i = 0; i < desfase; i += 1) celdas += '<span class="dia-vacio"></span>';
+  for (let d = 1; d <= diasEnMes; d += 1) {
+    const iso = `${anio}-${conCero(mes + 1)}-${conCero(d)}`;
+    const pasado = iso < hoyTexto;
+    const marca = marcas[iso.slice(5)];
+    const clases = ['dia', iso === hoyTexto ? 'hoy' : '', iso === borrador.fecha ? 'elegido' : '', marca ? 'marcado' : ''].filter(Boolean).join(' ');
+    const etiqueta = `${d} de ${MESES[mes]}${marca ? `: ${marca.join(', ')}` : ''}`;
+    celdas += `<button type="button" class="${clases}" data-fecha="${iso}" ${pasado ? 'disabled' : ''} aria-label="${escaparHtml(etiqueta)}" aria-pressed="${iso === borrador.fecha}" ${marca ? `title="${escaparHtml(marca.join(', '))}"` : ''}>${d}${marca ? '<span class="marca" aria-hidden="true">🎂</span>' : ''}</button>`;
+  }
+
+  $('calendario').innerHTML = `
+    <div class="cal-cabecera">
+      <button type="button" class="btn-icono" data-mes="-1" ${puedeRetroceder ? '' : 'disabled'} aria-label="Mes anterior">‹</button>
+      <span class="cal-mes">${MESES[mes]} ${anio}</span>
+      <button type="button" class="btn-icono" data-mes="1" aria-label="Mes siguiente">›</button>
+    </div>
+    <div class="cal-semana" aria-hidden="true">${DIAS_CORTOS.map((d) => `<span>${d}</span>`).join('')}</div>
+    <div class="cal-dias">${celdas}</div>
+    ${borrador.fecha ? `<p class="cal-elegida">${capitalizar(formatearFechaLarga(borrador.fecha))}</p>` : ''}`;
+}
+
+function elegirFecha(iso) {
+  borrador.fecha = iso;
+  const d = deISO(iso);
+  mesCalendario = new Date(d.getFullYear(), d.getMonth(), 1);
+  renderizarPasoCuando();
+  actualizarPie();
+}
+
+$('atajos-fecha').addEventListener('click', (evento) => {
+  const chip = evento.target.closest('[data-fecha]');
+  if (chip) elegirFecha(chip.dataset.fecha);
+});
+
+$('calendario').addEventListener('click', (evento) => {
+  const flecha = evento.target.closest('[data-mes]');
+  if (flecha && !flecha.disabled) {
+    mesCalendario = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() + Number(flecha.dataset.mes), 1);
+    renderizarCalendario();
+    return;
+  }
+  const dia = evento.target.closest('.dia[data-fecha]');
+  if (dia && !dia.disabled) elegirFecha(dia.dataset.fecha);
+});
+
+function franjaDeHora(hora) {
+  if (!hora) return null;
+  const [h, m] = hora.split(':').map(Number);
+  const min = h * 60 + m;
+  const franja = FRANJAS.find((f) => min >= f.desde && min <= f.hasta);
+  return franja ? franja.id : null;
+}
+
+function renderizarHoras() {
+  const activa = franjaActiva || franjaDeHora(borrador.hora);
+  $('franjas-hora').innerHTML =
+    `<button type="button" class="chip ${!borrador.hora && !franjaActiva ? 'activo' : ''}" data-franja="" aria-pressed="${!borrador.hora && !franjaActiva}">Sin hora</button>` +
+    FRANJAS.map((f) => `<button type="button" class="chip ${activa === f.id ? 'activo' : ''}" data-franja="${f.id}" aria-pressed="${activa === f.id}">${f.etiqueta}</button>`).join('');
+
+  const franja = FRANJAS.find((f) => f.id === activa);
+  if (!franja) { $('horas').innerHTML = ''; return; }
+  let html = '';
+  for (let min = franja.desde; min <= franja.hasta; min += 30) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    const valor = `${conCero(h)}:${conCero(m)}`;
+    html += `<button type="button" class="hora ${borrador.hora === valor ? 'activo' : ''}" data-hora="${valor}" aria-pressed="${borrador.hora === valor}">${formatearHora12h(h, m)}</button>`;
+  }
+  $('horas').innerHTML = html;
+}
+
+$('franjas-hora').addEventListener('click', (evento) => {
+  const chip = evento.target.closest('[data-franja]');
+  if (!chip) return;
+  franjaActiva = chip.dataset.franja || null;
+  if (!franjaActiva || franjaDeHora(borrador.hora) !== franjaActiva) borrador.hora = null;
+  renderizarHoras();
+});
+
+$('horas').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-hora]');
+  if (!boton) return;
+  borrador.hora = borrador.hora === boton.dataset.hora ? null : boton.dataset.hora;
+  renderizarHoras();
+});
+
+// --- Paso 3: Con quien ---
+function renderizarPasoConQuien() {
+  const opcion = (id, contenido, etiqueta) => `
+    <button type="button" role="radio" class="opcion-persona ${borrador.personaId === id ? 'activo' : ''}" aria-checked="${borrador.personaId === id}" data-persona="${id || ''}">
+      ${contenido}<span class="opcion-persona-texto">${etiqueta}</span>
+    </button>`;
+  $('opciones-persona').innerHTML =
+    opcion(null, '<span class="avatar-persona avatar-nadie" aria-hidden="true">—</span>', '<strong>Nadie en particular</strong>') +
+    personas.map((p) => opcion(p.id, avatarPersona(p), `<strong>${escaparHtml(p.nombre)}</strong><span>${escaparHtml(p.relacion)}</span>`)).join('') +
+    '<button type="button" class="opcion-persona opcion-nueva" id="btn-persona-desde-asistente"><span class="avatar-persona avatar-nadie" aria-hidden="true">+</span><span class="opcion-persona-texto"><strong>Nueva persona</strong></span></button>';
+}
+
+$('opciones-persona').addEventListener('click', (evento) => {
+  if (evento.target.closest('#btn-persona-desde-asistente')) {
+    abrirFormPersona(null, {
+      alGuardar: (persona) => {
+        borrador.personaId = persona.id;
+        renderizarPasoConQuien();
+        actualizarPie();
+      }
+    });
+    return;
+  }
+  const opcion = evento.target.closest('[data-persona]');
+  if (!opcion) return;
+  borrador.personaId = opcion.dataset.persona || null;
+  renderizarPasoConQuien();
+});
+
+// --- Paso 4: Donde ---
+function mismaUbicacion(a, b) {
+  return a && b && Math.round(a.lat * 1000) === Math.round(b.lat * 1000) && Math.round(a.lon * 1000) === Math.round(b.lon * 1000);
+}
+
+function renderizarPasoDonde() {
+  $('bloque-guardados').classList.toggle('oculto', lugaresGuardados.length === 0);
+  $('lugares-guardados').innerHTML = lugaresGuardados.map((l) => {
+    const activo = mismaUbicacion(l, borrador.ubicacion);
+    return `
+      <span class="chip-lugar ${activo ? 'activo' : ''}">
+        <button type="button" class="chip-lugar-elegir" data-lugar-guardado="${l.id}" aria-pressed="${activo}">
+          ${l.favorito ? '<span aria-label="Favorito">⭐</span> ' : ''}${escaparHtml(l.alias || l.nombre)}
+        </button>
+        <button type="button" class="chip-lugar-quitar" data-quitar-lugar="${l.id}" aria-label="Quitar ${escaparHtml(l.alias || l.nombre)} de tus lugares">✕</button>
+      </span>`;
+  }).join('');
+  renderizarUbicacionElegida();
+}
+
+function renderizarUbicacionElegida() {
+  const el = $('ubicacion-seleccionada');
+  const u = borrador.ubicacion;
+  if (!u) { el.classList.add('oculto'); el.innerHTML = ''; return; }
+  const guardado = lugaresGuardados.find((l) => mismaUbicacion(l, u));
+  const esFavorito = guardado && guardado.favorito;
+  el.classList.remove('oculto');
+  el.innerHTML = `
+    <div class="ubicacion-linea">
+      <span>📍 <strong>${escaparHtml(u.nombre)}</strong></span>
+      ${esFavorito
+        ? '<span class="texto-suave">⭐ En tus favoritos</span>'
+        : '<button type="button" class="enlace" id="btn-favorito">☆ Guardar en favoritos</button>'}
+    </div>
+    <div id="form-favorito" class="form-favorito oculto">
+      <input type="text" id="alias-favorito" maxlength="30" placeholder="Nombre corto (opcional), ej: Casa" aria-label="Nombre corto para este lugar" />
+      <button type="button" class="btn btn-secundario" id="btn-confirmar-favorito">Guardar</button>
+    </div>`;
+}
+
+function fijarUbicacion(ubicacion) {
+  borrador.ubicacion = ubicacion;
+  borrador.lugarElegido = null;
+  lugaresSugeridos = [];
+  $('lista-resultados-ubicacion').innerHTML = '';
+  ocultarMensaje($('mensaje-donde'));
+  renderizarPasoDonde();
+  actualizarPie();
+}
+
+$('lugares-guardados').addEventListener('click', async (evento) => {
+  const quitar = evento.target.closest('[data-quitar-lugar]');
+  if (quitar) {
+    try {
+      await llamarApi(`/api/lugares-guardados/${quitar.dataset.quitarLugar}`, { method: 'DELETE' });
+      lugaresGuardados = lugaresGuardados.filter((l) => l.id !== quitar.dataset.quitarLugar);
+      renderizarPasoDonde();
+    } catch (err) {
+      mostrarMensaje($('mensaje-donde'), err.message);
+    }
+    return;
+  }
+  const elegir = evento.target.closest('[data-lugar-guardado]');
+  if (!elegir) return;
+  const lugar = lugaresGuardados.find((l) => l.id === elegir.dataset.lugarGuardado);
+  if (lugar) fijarUbicacion({ nombre: lugar.nombre, lat: lugar.lat, lon: lugar.lon });
+});
+
+$('ubicacion-seleccionada').addEventListener('click', async (evento) => {
+  if (evento.target.closest('#btn-favorito')) {
+    $('form-favorito').classList.remove('oculto');
+    $('alias-favorito').focus();
+    return;
+  }
+  if (evento.target.closest('#btn-confirmar-favorito')) {
+    try {
+      const u = borrador.ubicacion;
+      await enviarJson('/api/lugares-guardados', 'POST', { ...u, alias: $('alias-favorito').value.trim() || null });
+      await cargarLugaresGuardados();
+      renderizarPasoDonde();
+      avisar('Lugar guardado en tus favoritos');
+    } catch (err) {
+      mostrarMensaje($('mensaje-donde'), err.message);
+    }
+  }
+});
+
+async function buscarUbicacion() {
+  const mensaje = $('mensaje-donde');
+  ocultarMensaje(mensaje);
+  const lista = $('lista-resultados-ubicacion');
+  lista.innerHTML = '';
+  const consulta = $('buscar-lugar').value.trim();
+  if (consulta.length < 2) {
+    mostrarMensaje(mensaje, 'Escribe al menos 2 letras para buscar un lugar.');
+    return;
+  }
+  try {
+    const data = await llamarApi(`/api/geocode?q=${encodeURIComponent(consulta)}`);
+    if (!data.resultados.length) {
+      mostrarMensaje(mensaje, `No encontré "${consulta}". Prueba con el nombre de la ciudad o del barrio.`, 'info');
+      return;
+    }
+    lista.innerHTML = data.resultados.map((lugar, i) => {
+      const detalle = [lugar.region, lugar.pais].filter(Boolean).join(', ');
+      return `<li><button type="button" data-resultado="${i}"><strong>${escaparHtml(lugar.nombre)}</strong>${detalle ? `<span>${escaparHtml(detalle)}</span>` : ''}</button></li>`;
+    }).join('');
+    lista.onclick = (e) => {
+      const boton = e.target.closest('[data-resultado]');
+      if (!boton) return;
+      const lugar = data.resultados[Number(boton.dataset.resultado)];
+      fijarUbicacion({ nombre: lugar.nombre, lat: lugar.latitud, lon: lugar.longitud });
+    };
+  } catch (err) {
+    mostrarMensaje(mensaje, err.message);
+  }
+}
+
+$('btn-buscar-lugar').addEventListener('click', buscarUbicacion);
+$('buscar-lugar').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); buscarUbicacion(); } });
+
+$('btn-mostrar-coordenadas').addEventListener('click', () => {
+  $('modo-coordenadas').classList.toggle('oculto');
+});
+
+$('btn-usar-coordenadas').addEventListener('click', () => {
+  const mensaje = $('mensaje-donde');
+  ocultarMensaje(mensaje);
+  const latTexto = $('coord-lat').value;
+  const lonTexto = $('coord-lon').value;
+  const lat = Number(latTexto);
+  const lon = Number(lonTexto);
+  if (latTexto === '' || lonTexto === '' || Number.isNaN(lat) || Number.isNaN(lon)) {
+    mostrarMensaje(mensaje, 'Escribe una latitud y una longitud.');
+    return;
+  }
+  if (lat < -90 || lat > 90) { mostrarMensaje(mensaje, 'La latitud debe estar entre -90 y 90.'); return; }
+  if (lon < -180 || lon > 180) { mostrarMensaje(mensaje, 'La longitud debe estar entre -180 y 180.'); return; }
+  const nombre = $('coord-nombre').value.trim() || `Lat ${lat}, Lon ${lon}`;
+  fijarUbicacion({ nombre, lat, lon });
+  $('modo-coordenadas').classList.add('oculto');
+});
+
+// --- Paso 5: Detalles (resumen, titulo, IA, lugares cercanos) ---
+function renderizarPasoDetalles() {
+  const persona = borrador.personaId ? buscarPersonaPorId(borrador.personaId) : null;
+  const hora = borrador.hora ? (() => { const [h, m] = borrador.hora.split(':').map(Number); return formatearHora12h(h, m); })() : null;
+  $('resumen-cita').innerHTML = `
+    <span class="icono-tipo">${ICONOS_TIPO[borrador.tipo] || ICONOS_TIPO.otro}</span>
+    <p>
+      <strong>${escaparHtml(etiquetaTipo(borrador.tipo))}</strong>${persona ? ` con ${escaparHtml(persona.nombre)}` : ''}<br>
+      ${capitalizar(formatearFechaLarga(borrador.fecha))}${hora ? `, ${hora}` : ''}<br>
+      ${escaparHtml(borrador.ubicacion.nombre)}
+    </p>`;
+  $('titulo-sugerencias').innerHTML = `Lugares para tu plan en ${escaparHtml(borrador.ubicacion.nombre)} <span class="texto-suave">(opcional)</span>`;
+
+  // Si cambio algo que usa la IA, la sugerencia anterior ya no aplica.
+  const clave = JSON.stringify([borrador.tipo, borrador.fecha, borrador.personaId, borrador.ubicacion]);
+  if (clave !== claveSugerenciaIA) ocultarSugerenciaIA();
+  renderizarLugares();
+}
+
+function ocultarSugerenciaIA() {
+  $('ia-sugerencia').classList.add('oculto');
+  ocultarMensaje($('ia-mensaje'));
+}
+
+$('btn-sugerir-ia').addEventListener('click', async () => {
+  ocultarSugerenciaIA();
+  const boton = $('btn-sugerir-ia');
+  $('ia-cargando').classList.remove('oculto');
+  boton.disabled = true;
+  try {
+    const data = await enviarJson('/api/sugerir-plan', 'POST', {
+      tipo: borrador.tipo,
+      personaId: borrador.personaId,
+      fecha: borrador.fecha,
+      ubicacion: borrador.ubicacion
+    });
+    claveSugerenciaIA = JSON.stringify([borrador.tipo, borrador.fecha, borrador.personaId, borrador.ubicacion]);
+    $('ia-sugerencia-titulo').textContent = data.titulo;
+    $('ia-sugerencia-descripcion').textContent = data.descripcion;
+    $('ia-sugerencia').classList.remove('oculto');
+  } catch (err) {
+    mostrarMensaje($('ia-mensaje'), err.message);
+  } finally {
+    $('ia-cargando').classList.add('oculto');
+    boton.disabled = false;
+  }
+});
+
+$('btn-usar-sugerencia').addEventListener('click', () => {
+  $('cita-titulo').value = $('ia-sugerencia-titulo').textContent;
+  $('ia-sugerencia').classList.add('oculto');
+});
+
+$('btn-ver-sugerencias').addEventListener('click', async () => {
+  const mensaje = $('lugares-mensaje');
+  ocultarMensaje(mensaje);
+  $('lista-lugares').innerHTML = '';
+  $('lugares-cargando').classList.remove('oculto');
+  try {
+    const { lat, lon } = borrador.ubicacion;
+    const data = await llamarApi(`/api/sugerencias?lat=${lat}&lon=${lon}&tipo=${encodeURIComponent(borrador.tipo)}`);
+    lugaresSugeridos = data.lugares;
+    if (!lugaresSugeridos.length) {
+      mostrarMensaje(mensaje, 'No encontré lugares cercanos para este tipo de plan. Puedes guardar la cita solo con la ubicación general.', 'info');
+    }
+    renderizarLugares();
+  } catch (err) {
+    mostrarMensaje(mensaje, err.message);
+  } finally {
+    $('lugares-cargando').classList.add('oculto');
+  }
+});
+
+function renderizarLugares() {
+  const elegido = borrador.lugarElegido;
+  $('lista-lugares').innerHTML = lugaresSugeridos.map((lugar, i) => {
+    const esElegido = elegido && elegido.lat === lugar.lat && elegido.lon === lugar.lon;
+    return `
+      <div class="lugar-card ${esElegido ? 'elegido' : ''}">
+        <h4>${escaparHtml(lugar.nombre)}</h4>
+        <div class="distancia">${lugar.distanciaKm} km de distancia</div>
+        <div class="acciones">
+          <button type="button" class="elegir" data-lugar="${i}" aria-pressed="${Boolean(esElegido)}">${esElegido ? 'Elegido' : 'Elegir'}</button>
+          <a class="enlace-mapa" href="${lugar.enlaceMapa}" target="_blank" rel="noopener">Ver mapa</a>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+$('lista-lugares').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-lugar]');
+  if (!boton) return;
+  const lugar = lugaresSugeridos[Number(boton.dataset.lugar)];
+  const yaElegido = borrador.lugarElegido && borrador.lugarElegido.lat === lugar.lat && borrador.lugarElegido.lon === lugar.lon;
+  borrador.lugarElegido = yaElegido ? null : lugar;
+  renderizarLugares();
+});
+
+async function guardarCita() {
+  const mensaje = $('mensaje-form');
+  ocultarMensaje(mensaje);
+  const boton = $('btn-siguiente');
+  boton.disabled = true;
+  boton.textContent = 'Guardando...';
+  try {
+    const { cita } = await enviarJson('/api/citas', 'POST', {
+      titulo: $('cita-titulo').value.trim() || null,
+      tipo: borrador.tipo,
+      personaId: borrador.personaId,
+      fecha: borrador.fecha,
+      hora: borrador.hora,
+      ubicacion: borrador.ubicacion,
+      lugarSugerido: borrador.lugarElegido
+    });
+    mostrarConfirmacion(cita);
+    await Promise.all([cargarCitas(), cargarLugaresGuardados()]);
+    renderizarTodo();
+  } catch (err) {
+    mostrarMensaje(mensaje, err.message);
+    boton.disabled = false;
+    boton.textContent = 'Guardar cita';
+  }
+}
+
+/** Pantalla final del asistente: la cita quedo guardada; ofrece el calendario. */
+function mostrarConfirmacion(cita) {
+  const persona = cita.personaId ? buscarPersonaPorId(cita.personaId) : null;
+  const lugar = cita.lugarSugerido || cita.ubicacion;
+  document.querySelectorAll('.paso').forEach((p) => p.classList.toggle('activo', p.dataset.paso === 'listo'));
+  $('asistente-progreso-texto').textContent = 'Todo listo';
+  $('asistente-titulo').textContent = 'Cita guardada';
+  $('asistente-barra').style.width = '100%';
+  $('btn-atras').classList.add('invisible');
+  $('asistente-pista').textContent = '';
+  $('btn-siguiente').disabled = false;
+  $('btn-siguiente').textContent = 'Listo';
+  $('btn-siguiente').classList.replace('btn-principal', 'btn-secundario');
+  pasoActual = 'listo';
+
+  $('cita-confirmada').innerHTML = `
+    <div class="confirmacion">
+      <span class="confirmacion-icono" aria-hidden="true">✓</span>
+      <h3>${escaparHtml(cita.titulo)}</h3>
+      <p>${capitalizar(formatearFechaHora(cita))}<br>${persona ? `Con ${escaparHtml(persona.nombre)} en ` : 'En '}${escaparHtml(lugar.nombre)}</p>
+      <a class="btn btn-principal" href="${generarUrlGoogleCalendar(cita, persona)}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
+      ${persona && persona.correo ? `<p class="texto-suave confirmacion-nota">Google Calendar incluirá a ${escaparHtml(persona.nombre)} como invitada.</p>` : ''}
+    </div>`;
+  document.querySelector('.asistente-cuerpo').scrollTop = 0;
+}
+
+// -----------------------------------------------------------------------
+// Ideas (tops curados de blogs, via SerpApi en el backend)
+// -----------------------------------------------------------------------
+async function cargarCategoriasTops() {
+  try {
+    const data = await llamarApi('/api/tops-categorias');
+    $('tabs-tops').innerHTML = data.categorias
+      .map((c) => `<button type="button" class="chip" data-top="${c.id}" aria-pressed="false">${escaparHtml(c.etiqueta)}</button>`)
+      .join('');
+    if (data.categorias.length > 0) seleccionarTabTops(data.categorias[0].id);
+  } catch (err) {
+    mostrarMensaje($('tops-mensaje'), err.message);
+  }
+}
+
+$('tabs-tops').addEventListener('click', (evento) => {
+  const chip = evento.target.closest('[data-top]');
+  if (chip) seleccionarTabTops(chip.dataset.top);
+});
+
 function seleccionarTabTops(categoriaId) {
-  tabActivaTops = categoriaId;
-  elTabsTops.querySelectorAll('.tab-top').forEach((boton) => {
-    boton.classList.toggle('activo', boton.dataset.id === categoriaId);
+  $('tabs-tops').querySelectorAll('.chip').forEach((c) => {
+    const activo = c.dataset.top === categoriaId;
+    c.classList.toggle('activo', activo);
+    c.setAttribute('aria-pressed', String(activo));
   });
   cargarTops(categoriaId);
 }
 
 async function cargarTops(categoriaId) {
-  ocultarMensaje(elTopsMensaje);
-  elTopsActualizado.classList.add('oculto');
-  elListaTops.innerHTML = '';
-  elTopsCargando.classList.remove('oculto');
+  ocultarMensaje($('tops-mensaje'));
+  $('tops-actualizado').classList.add('oculto');
+  $('lista-tops').innerHTML = '';
+  $('tops-cargando').classList.remove('oculto');
 
   try {
     const data = await llamarApi(`/api/tops/${categoriaId}`);
-    elTopsCargando.classList.add('oculto');
-
     if (!data.resultados || data.resultados.length === 0) {
-      mostrarMensaje(elTopsMensaje, 'No encontré ideas para esta categoría en este momento.', 'info');
+      mostrarMensaje($('tops-mensaje'), 'No encontré ideas para esta categoría en este momento.', 'info');
       return;
     }
-
     if (data.actualizadoEn) {
-      const fecha = new Date(data.actualizadoEn);
-      const fechaTexto = fecha.toLocaleDateString('es', { day: 'numeric', month: 'long' });
-      elTopsActualizado.textContent = `Actualizado el ${fechaTexto}`;
-      elTopsActualizado.classList.remove('oculto');
+      const fechaTexto = new Date(data.actualizadoEn).toLocaleDateString('es', { day: 'numeric', month: 'long' });
+      $('tops-actualizado').textContent = `Actualizado el ${fechaTexto}`;
+      $('tops-actualizado').classList.remove('oculto');
     }
-
-    elListaTops.innerHTML = data.resultados
-      .map(
-        (r) => `
+    $('lista-tops').innerHTML = data.resultados.map((r) => `
       <article class="top-card">
         <h4>${escaparHtml(r.titulo)}</h4>
         ${r.resumen ? `<p class="top-resumen">${escaparHtml(r.resumen)}</p>` : ''}
@@ -837,19 +1542,18 @@ async function cargarTops(categoriaId) {
           <span class="top-fuente">${escaparHtml(r.fuente)}</span>
           <a href="${r.enlace}" target="_blank" rel="noopener">Leer más</a>
         </div>
-      </article>
-    `
-      )
-      .join('');
+        <button type="button" class="btn btn-terciario" data-accion="nueva-cita">Planear una cita</button>
+      </article>`).join('');
   } catch (err) {
-    elTopsCargando.classList.add('oculto');
-    mostrarMensaje(elTopsMensaje, err.message);
+    mostrarMensaje($('tops-mensaje'), err.message);
+  } finally {
+    $('tops-cargando').classList.add('oculto');
   }
 }
 
-/** Rellena con ceros a la izquierda (ej: 5 -> "05"). */
-function conCero(n) { return String(n).padStart(2, '0'); }
-
+// -----------------------------------------------------------------------
+// Google Calendar
+// -----------------------------------------------------------------------
 /**
  * Genera el rango de fechas en el formato que espera Google Calendar.
  * Sin hora: evento de "todo el dia" (fin = dia siguiente, como pide Google).
@@ -883,58 +1587,50 @@ function generarUrlGoogleCalendar(cita, persona) {
   url.searchParams.set('action', 'TEMPLATE');
   url.searchParams.set('text', cita.titulo);
   url.searchParams.set('dates', formatearRangoGoogleCalendar(cita.fecha, cita.hora));
-
   const lugar = cita.lugarSugerido || cita.ubicacion;
-  if (lugar && lugar.nombre) {
-    url.searchParams.set('location', lugar.nombre);
-  }
-  if (persona && persona.correo) {
-    url.searchParams.set('add', persona.correo);
-  }
-
+  if (lugar && lugar.nombre) url.searchParams.set('location', lugar.nombre);
+  if (persona && persona.correo) url.searchParams.set('add', persona.correo);
   return url.toString();
 }
 
 // -----------------------------------------------------------------------
-// Sesion (login / logout con Google)
+// Sesion (login / logout con Google) y pagos
 // -----------------------------------------------------------------------
 function mostrarPuertaLogin(mensaje) {
-  elContenidoApp.classList.add('oculto');
-  elPuertaLogin.classList.remove('oculto');
-  if (mensaje) {
-    mostrarMensaje(elPuertaMensaje, mensaje, 'info');
-  } else {
-    ocultarMensaje(elPuertaMensaje);
-  }
+  $('contenido-app').classList.add('oculto');
+  $('puerta-login').classList.remove('oculto');
+  if (mensaje) mostrarMensaje($('puerta-mensaje'), mensaje, 'info');
+  else ocultarMensaje($('puerta-mensaje'));
 }
 
 function mostrarApp(usuario) {
-  elPuertaLogin.classList.add('oculto');
-  elContenidoApp.classList.remove('oculto');
+  usuarioActual = usuario;
+  $('puerta-login').classList.add('oculto');
+  $('contenido-app').classList.remove('oculto');
+  const primerNombre = (usuario.nombre || '').split(' ')[0];
+  $('saludo-titulo').textContent = primerNombre ? `Hola, ${primerNombre}` : 'Hola';
 
-  elCuenta.innerHTML = `
+  $('cuenta').innerHTML = `
     ${usuario.avatarUrl ? `<img class="avatar" src="${usuario.avatarUrl}" alt="" referrerpolicy="no-referrer">` : ''}
-    <span>${escaparHtml(usuario.nombre)}</span>
     <button type="button" class="btn-apoyar" id="btn-apoyar">☕ Apoyar</button>
     <button type="button" class="btn-cerrar-sesion" id="btn-cerrar-sesion">Cerrar sesión</button>
   `;
-  document.getElementById('btn-cerrar-sesion').addEventListener('click', cerrarSesion);
-  document.getElementById('btn-apoyar').addEventListener('click', iniciarPago);
+  $('btn-cerrar-sesion').addEventListener('click', cerrarSesion);
+  $('btn-apoyar').addEventListener('click', iniciarPago);
 }
 
 async function iniciarPago() {
-  const boton = document.getElementById('btn-apoyar');
+  const boton = $('btn-apoyar');
   const textoOriginal = boton.textContent;
   boton.disabled = true;
   boton.textContent = 'Un momento...';
-
   try {
     const data = await llamarApi('/api/crear-pago', { method: 'POST' });
     window.location.href = data.url;
   } catch (err) {
     boton.disabled = false;
     boton.textContent = textoOriginal;
-    mostrarMensaje(elMensajePago, err.message);
+    mostrarMensaje($('mensaje-pago'), err.message);
   }
 }
 
@@ -947,13 +1643,11 @@ function revisarResultadoDePago() {
   const parametros = new URLSearchParams(window.location.search);
   const resultado = parametros.get('pago');
   if (!resultado) return;
-
   if (resultado === 'exitoso') {
-    mostrarMensaje(elMensajePago, '¡Gracias por tu apoyo! Te enviamos un correo de confirmación.', 'info');
+    mostrarMensaje($('mensaje-pago'), '¡Gracias por tu apoyo! Te enviamos un correo de confirmación.', 'info');
   } else if (resultado === 'cancelado') {
-    mostrarMensaje(elMensajePago, 'Cancelaste el pago. No se realizó ningún cargo.', 'info');
+    mostrarMensaje($('mensaje-pago'), 'Cancelaste el pago. No se realizó ningún cargo.', 'info');
   }
-
   const url = new URL(window.location.href);
   url.searchParams.delete('pago');
   window.history.replaceState({}, '', url.toString());
@@ -965,24 +1659,22 @@ async function cerrarSesion() {
   } catch (err) {
     // Aunque falle la llamada, igual mostramos la puerta de login.
   }
-  elCuenta.innerHTML = '';
+  $('cuenta').innerHTML = '';
   mostrarPuertaLogin();
 }
 
 async function iniciar() {
   revisarResultadoDePago();
-  poblarSelectHora(selectHora);
-
   try {
     const data = await fetch('/api/usuario-actual').then((r) => r.json());
     if (data.usuario) {
       mostrarApp(data.usuario);
-      await Promise.all([cargarTiposCita(), cargarRelaciones(), cargarPersonas(), cargarCategoriasTops()]);
-      cargarCitas();
+      await Promise.all([cargarTiposCita(), cargarRelaciones(), cargarPersonas(), cargarCitas(), cargarLugaresGuardados()]);
+      renderizarTodo();
     } else if (!data.loginConfigurado) {
       mostrarPuertaLogin('El inicio de sesión con Google todavía no está configurado en este servidor.');
-      document.getElementById('btn-login-puerta').style.pointerEvents = 'none';
-      document.getElementById('btn-login-puerta').style.opacity = '0.5';
+      $('btn-login-puerta').style.pointerEvents = 'none';
+      $('btn-login-puerta').style.opacity = '0.5';
     } else {
       mostrarPuertaLogin();
     }
@@ -991,7 +1683,4 @@ async function iniciar() {
   }
 }
 
-// -----------------------------------------------------------------------
-// Inicio
-// -----------------------------------------------------------------------
 iniciar();

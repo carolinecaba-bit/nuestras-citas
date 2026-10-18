@@ -6,191 +6,255 @@
 <title>Nuestras citas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="contenedor">
 
-    <header class="hero">
+  <header class="barra">
+    <div class="barra-interior">
+      <span class="marca">Nuestras citas</span>
       <div id="cuenta" class="cuenta"></div>
-      <p class="hero-linea">Un espacio para planear momentos</p>
-      <h1>Nuestras citas</h1>
-      <p class="hero-sub">Planea con quien quieras, revisa el clima y descubre a dónde ir, en cualquier parte.</p>
-    </header>
+    </div>
+  </header>
 
-    <section id="puerta-login" class="tarjeta puerta-login oculto">
-      <h2>Inicia sesión para continuar</h2>
-      <p class="puerta-texto">Tus citas son privadas: solo se ven después de iniciar sesión.</p>
-      <a href="/auth/google" class="btn-principal btn-google" id="btn-login-puerta">
-        <span class="icono-google">
-          <svg viewBox="0 0 48 48" width="18" height="18"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.4C29.4 34.9 26.8 36 24 36c-5.2 0-9.6-3.4-11.2-8.1l-6.5 5C9.6 39.6 16.3 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.5 5.4C40.3 36.5 44 30.9 44 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
-        </span>
-        Iniciar sesión con Google
-      </a>
-      <p id="puerta-mensaje" class="mensaje oculto"></p>
-    </section>
+  <!-- Puerta de login (sin sesion) -->
+  <main id="puerta-login" class="puerta oculto">
+    <p class="puerta-linea">Un espacio para planear momentos</p>
+    <h1>Planea con quien quieras, revisa el clima y descubre a dónde ir.</h1>
+    <p class="puerta-texto">Tus citas son privadas: solo se ven después de iniciar sesión.</p>
+    <a href="/auth/google" class="btn btn-principal btn-google" id="btn-login-puerta">
+      <span class="icono-google">
+        <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.4C29.4 34.9 26.8 36 24 36c-5.2 0-9.6-3.4-11.2-8.1l-6.5 5C9.6 39.6 16.3 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.5 5.4C40.3 36.5 44 30.9 44 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
+      </span>
+      Iniciar sesión con Google
+    </a>
+    <p id="puerta-mensaje" class="mensaje oculto"></p>
+  </main>
 
+  <!-- Dashboard (con sesion) -->
+  <main id="contenido-app" class="dashboard oculto">
     <div id="mensaje-pago" class="mensaje oculto" role="status"></div>
 
-    <div id="contenido-app" class="oculto">
+    <div class="saludo">
+      <h1 id="saludo-titulo">Hola</h1>
+      <button type="button" class="btn btn-principal" data-accion="nueva-cita">+ Nueva cita</button>
+    </div>
 
-    <section class="tarjeta">
-      <h2>Tus personas</h2>
-      <p class="tarjeta-subtitulo">Guarda perfiles simples de con quién sales, para no volver a escribirlo cada vez.</p>
+    <nav class="pestanas" role="tablist" aria-label="Secciones">
+      <button type="button" role="tab" class="pestana activa" data-pestana="inicio" aria-selected="true">Inicio</button>
+      <button type="button" role="tab" class="pestana" data-pestana="citas" aria-selected="false">Citas</button>
+      <button type="button" role="tab" class="pestana" data-pestana="personas" aria-selected="false">Personas</button>
+      <button type="button" role="tab" class="pestana" data-pestana="ideas" aria-selected="false">Ideas</button>
+    </nav>
 
-      <form id="form-persona" class="formulario" autocomplete="off">
-        <div class="fila-doble">
-          <div>
-            <label for="persona-nombre">Nombre</label>
-            <input type="text" id="persona-nombre" placeholder="Ej: Ana" />
-          </div>
-          <div>
-            <label for="persona-relacion">Relación</label>
-            <select id="persona-relacion"></select>
-            <input type="text" id="persona-relacion-otra" class="oculto" placeholder="Escribe la relación" />
-          </div>
+    <!-- Inicio -->
+    <section id="panel-inicio" class="panel" role="tabpanel">
+      <div class="inicio-rejilla">
+        <div class="inicio-principal">
+          <div id="proxima-cita"></div>
+          <section class="bloque">
+            <h2>Hace tiempo que no…</h2>
+            <div id="lista-hace-tiempo" class="lista-filas"></div>
+          </section>
         </div>
-
-        <div class="fila-doble">
-          <div>
-            <label for="persona-cumpleanos">Cumpleaños (opcional)</label>
-            <input type="date" id="persona-cumpleanos" />
-          </div>
-          <div>
-            <label for="persona-comida">Comida favorita (opcional)</label>
-            <input type="text" id="persona-comida" placeholder="Ej: Pizza" />
-          </div>
-        </div>
-
-        <label for="persona-correo">Correo (opcional, para invitarla a Google Calendar)</label>
-        <input type="email" id="persona-correo" placeholder="Ej: ana@correo.com" />
-
-        <label for="persona-notas">Notas (opcional)</label>
-        <textarea id="persona-notas" rows="2" placeholder="Alergias, gustos, tallas... lo que quieras recordar"></textarea>
-
-        <div id="mensaje-persona" class="mensaje oculto" role="alert"></div>
-
-        <div class="fila-botones-persona">
-          <button type="submit" class="btn-principal" id="btn-guardar-persona">Guardar persona</button>
-          <button type="button" class="btn-terciario oculto" id="btn-cancelar-edicion-persona">Cancelar edición</button>
-        </div>
-      </form>
-
-      <div id="cargando-personas" class="cargando oculto">Cargando personas...</div>
-      <div id="lista-personas" class="lista-personas"></div>
-      <p id="sin-personas" class="sin-citas oculto">Aún no has agregado a nadie.</p>
+        <aside class="inicio-lateral">
+          <section class="bloque">
+            <h2>Próximos cumpleaños</h2>
+            <div id="lista-cumpleanos" class="lista-filas"></div>
+          </section>
+          <section class="bloque">
+            <h2>Fechas importantes</h2>
+            <div id="lista-fechas-importantes" class="lista-filas"></div>
+          </section>
+          <section class="bloque">
+            <h2>Tus números</h2>
+            <dl id="tus-numeros" class="numeros"></dl>
+          </section>
+        </aside>
+      </div>
     </section>
 
-    <section class="tarjeta">
-      <h2>Detalles del plan</h2>
-      <form id="form-cita" class="formulario" autocomplete="off">
-        <div class="fila-doble">
-          <div>
-            <label for="cita-tipo">Tipo de plan</label>
-            <select id="cita-tipo"></select>
-          </div>
-          <div>
-            <label for="cita-fecha">Fecha</label>
-            <input type="date" id="cita-fecha" />
-          </div>
+    <!-- Citas -->
+    <section id="panel-citas" class="panel oculto" role="tabpanel">
+      <div class="encabezado-panel">
+        <div class="segmentos" role="group" aria-label="Filtrar citas">
+          <button type="button" class="segmento activo" data-filtro="proximas">Próximas</button>
+          <button type="button" class="segmento" data-filtro="pasadas">Pasadas</button>
         </div>
-
-        <label for="cita-hora">Hora (opcional)</label>
-        <select id="cita-hora"></select>
-
-        <label for="cita-persona">Con quién (opcional)</label>
-        <div class="fila">
-          <select id="cita-persona"></select>
-          <button type="button" class="btn-terciario" id="btn-ir-a-personas">+ Nueva persona</button>
-        </div>
-
-        <label for="cita-titulo">Título (opcional: se genera solo si lo dejas vacío)</label>
-        <div class="fila">
-          <input type="text" id="cita-titulo" placeholder="Ej: Picnic con Ana" />
-          <button type="button" id="btn-sugerir-ia" class="btn-terciario" disabled>✨ Sugerir con IA</button>
-        </div>
-        <p class="ia-ayuda">Elige tipo de plan, fecha y ubicación para activar esto.</p>
-
-        <div id="ia-cargando" class="cargando oculto">Pensando una idea...</div>
-        <div id="ia-mensaje" class="mensaje oculto"></div>
-        <div id="ia-sugerencia" class="ia-sugerencia oculto">
-          <h4 id="ia-sugerencia-titulo"></h4>
-          <p id="ia-sugerencia-descripcion"></p>
-          <button type="button" id="btn-usar-sugerencia" class="btn-terciario">Usar este título</button>
-        </div>
-
-        <label>Ubicación general</label>
-        <div class="tabs-ubicacion" role="tablist">
-          <button type="button" class="tab-ubicacion activo" data-modo="buscar">Buscar lugar</button>
-          <button type="button" class="tab-ubicacion" data-modo="coordenadas">Coordenadas</button>
-        </div>
-
-        <div id="modo-buscar" class="modo-ubicacion activo">
-          <div class="fila">
-            <input type="text" id="buscar-lugar" placeholder="Ej: Santo Domingo, Madrid..." />
-            <button type="button" id="btn-buscar-lugar">Buscar</button>
-          </div>
-          <ul id="lista-resultados-ubicacion" class="lista-resultados"></ul>
-        </div>
-
-        <div id="modo-coordenadas" class="modo-ubicacion">
-          <div class="fila-doble">
-            <div>
-              <label for="coord-lat">Latitud</label>
-              <input type="number" step="any" id="coord-lat" placeholder="-90 a 90" />
-            </div>
-            <div>
-              <label for="coord-lon">Longitud</label>
-              <input type="number" step="any" id="coord-lon" placeholder="-180 a 180" />
-            </div>
-          </div>
-          <label for="coord-nombre">Nombre para mostrar</label>
-          <input type="text" id="coord-nombre" placeholder="Ej: Zona colonial" />
-          <button type="button" id="btn-usar-coordenadas" class="btn-terciario">Usar estas coordenadas</button>
-        </div>
-
-        <div id="ubicacion-seleccionada" class="ubicacion-seleccionada oculto"></div>
-
-        <div id="seccion-sugerencias" class="seccion-sugerencias oculto">
-          <div class="sugerencias-encabezado">
-            <h3 id="titulo-sugerencias">Lugares cercanos</h3>
-            <button type="button" id="btn-ver-sugerencias" class="btn-terciario">Ver sugerencias</button>
-          </div>
-          <div id="lugares-cargando" class="cargando oculto">Buscando lugares cercanos...</div>
-          <div id="lugares-mensaje" class="mensaje oculto"></div>
-          <div id="lista-lugares" class="lista-lugares"></div>
-        </div>
-
-        <div id="mensaje-form" class="mensaje oculto" role="alert"></div>
-
-        <button type="submit" class="btn-principal">Guardar cita</button>
-      </form>
-    </section>
-
-    <section class="tarjeta">
-      <h2>Tus citas</h2>
+      </div>
       <div id="mensaje-lista" class="mensaje oculto" role="alert"></div>
       <div id="cargando-lista" class="cargando">Cargando citas...</div>
       <div id="linea-tiempo" class="linea-tiempo"></div>
-      <p id="sin-citas" class="sin-citas oculto">Aún no tienes citas guardadas. Crea tu primer plan arriba.</p>
+      <div id="sin-citas" class="vacio oculto"></div>
     </section>
 
-    <section class="tarjeta">
-      <h2>Ideas y qué hacer</h2>
-      <p class="tarjeta-subtitulo">Ideas de blogs reales, buscadas y actualizadas automáticamente.</p>
+    <!-- Personas -->
+    <section id="panel-personas" class="panel oculto" role="tabpanel">
+      <div class="encabezado-panel">
+        <p class="texto-suave">Guarda a las personas con quienes sales y sus fechas importantes.</p>
+        <button type="button" class="btn btn-secundario" data-accion="nueva-persona">+ Nueva persona</button>
+      </div>
+      <div id="mensaje-personas" class="mensaje oculto" role="alert"></div>
+      <div id="lista-personas" class="lista-personas"></div>
+      <div id="sin-personas" class="vacio oculto">
+        <p>Aún no has agregado a nadie. Agrega a alguien para recordar sus cumpleaños y planear citas con un toque.</p>
+        <button type="button" class="btn btn-secundario" data-accion="nueva-persona">+ Agregar la primera persona</button>
+      </div>
+    </section>
 
-      <div id="tabs-tops" class="tabs-tops"></div>
-
+    <!-- Ideas -->
+    <section id="panel-ideas" class="panel oculto" role="tabpanel">
+      <p class="texto-suave">Ideas de blogs reales, buscadas y actualizadas automáticamente.</p>
+      <div id="tabs-tops" class="chips"></div>
       <div id="tops-actualizado" class="tops-actualizado oculto"></div>
       <div id="tops-cargando" class="cargando oculto">Buscando ideas...</div>
       <div id="tops-mensaje" class="mensaje oculto"></div>
       <div id="lista-tops" class="lista-tops"></div>
     </section>
-
-    </div>
-
   </main>
+
+  <!-- Nueva cita: paso a paso -->
+  <div id="asistente" class="asistente oculto" role="dialog" aria-modal="true" aria-labelledby="asistente-titulo">
+    <div class="asistente-caja">
+      <header class="asistente-cabecera">
+        <button type="button" class="btn-icono" data-accion="cerrar-asistente" aria-label="Cerrar">✕</button>
+        <div>
+          <p id="asistente-progreso-texto" class="asistente-progreso-texto"></p>
+          <h2 id="asistente-titulo">Nueva cita</h2>
+        </div>
+      </header>
+      <div class="asistente-progreso" aria-hidden="true"><span id="asistente-barra"></span></div>
+
+      <div class="asistente-cuerpo">
+        <!-- Paso 1: Que -->
+        <section class="paso" data-paso="1">
+          <p class="paso-pregunta">¿Qué plan tienes en mente?</p>
+          <div id="opciones-tipo" class="opciones-tipo" role="radiogroup" aria-label="Tipo de plan"></div>
+        </section>
+
+        <!-- Paso 2: Cuando -->
+        <section class="paso" data-paso="2">
+          <p class="paso-pregunta">¿Cuándo?</p>
+          <div id="atajos-fecha" class="chips"></div>
+          <div id="calendario" class="calendario"></div>
+          <p class="campo-etiqueta">Hora <span class="texto-suave">(opcional)</span></p>
+          <div id="franjas-hora" class="chips"></div>
+          <div id="horas" class="horas"></div>
+        </section>
+
+        <!-- Paso 3: Con quien -->
+        <section class="paso" data-paso="3">
+          <p class="paso-pregunta">¿Con quién?</p>
+          <div id="opciones-persona" class="opciones-persona" role="radiogroup" aria-label="Con quién"></div>
+        </section>
+
+        <!-- Paso 4: Donde -->
+        <section class="paso" data-paso="4">
+          <p class="paso-pregunta">¿Dónde?</p>
+          <div id="bloque-guardados">
+            <p class="campo-etiqueta">Tus lugares</p>
+            <div id="lugares-guardados" class="chips"></div>
+          </div>
+          <p class="campo-etiqueta">Buscar otro lugar</p>
+          <div class="fila">
+            <input type="text" id="buscar-lugar" placeholder="Ej: Santiago, Santo Domingo, Madrid" autocomplete="off" />
+            <button type="button" class="btn btn-secundario" id="btn-buscar-lugar">Buscar</button>
+          </div>
+          <ul id="lista-resultados-ubicacion" class="lista-resultados"></ul>
+          <button type="button" class="enlace" id="btn-mostrar-coordenadas">Usar coordenadas</button>
+          <div id="modo-coordenadas" class="coordenadas oculto">
+            <div class="fila-doble">
+              <label>Latitud<input type="number" step="any" id="coord-lat" placeholder="-90 a 90" /></label>
+              <label>Longitud<input type="number" step="any" id="coord-lon" placeholder="-180 a 180" /></label>
+            </div>
+            <label>Nombre para mostrar<input type="text" id="coord-nombre" placeholder="Ej: Zona colonial" /></label>
+            <button type="button" class="btn btn-secundario" id="btn-usar-coordenadas">Usar estas coordenadas</button>
+          </div>
+          <div id="ubicacion-seleccionada" class="ubicacion-seleccionada oculto"></div>
+          <div id="mensaje-donde" class="mensaje oculto" role="alert"></div>
+        </section>
+
+        <!-- Paso 5: Detalles -->
+        <section class="paso" data-paso="5">
+          <p class="paso-pregunta">Ponle nombre a tu plan</p>
+          <div id="resumen-cita" class="resumen-cita"></div>
+          <label class="campo-etiqueta" for="cita-titulo">Título <span class="texto-suave">(si lo dejas vacío, se crea uno solo)</span></label>
+          <div class="fila">
+            <input type="text" id="cita-titulo" placeholder="Ej: Picnic con Ana" autocomplete="off" />
+            <button type="button" id="btn-sugerir-ia" class="btn btn-secundario">✨ Sugerir con IA</button>
+          </div>
+          <div id="ia-cargando" class="cargando oculto">Pensando una idea...</div>
+          <div id="ia-mensaje" class="mensaje oculto"></div>
+          <div id="ia-sugerencia" class="ia-sugerencia oculto">
+            <h4 id="ia-sugerencia-titulo"></h4>
+            <p id="ia-sugerencia-descripcion"></p>
+            <button type="button" id="btn-usar-sugerencia" class="btn btn-terciario">Usar este título</button>
+          </div>
+
+          <div class="seccion-sugerencias">
+            <div class="sugerencias-encabezado">
+              <p class="campo-etiqueta" id="titulo-sugerencias">Lugares cercanos <span class="texto-suave">(opcional)</span></p>
+              <button type="button" id="btn-ver-sugerencias" class="btn btn-terciario">Ver sugerencias</button>
+            </div>
+            <div id="lugares-cargando" class="cargando oculto">Buscando lugares cercanos...</div>
+            <div id="lugares-mensaje" class="mensaje oculto"></div>
+            <div id="lista-lugares" class="lista-lugares"></div>
+          </div>
+          <div id="mensaje-form" class="mensaje oculto" role="alert"></div>
+        </section>
+
+        <!-- Confirmacion -->
+        <section class="paso paso-listo" data-paso="listo">
+          <div id="cita-confirmada"></div>
+        </section>
+      </div>
+
+      <footer class="asistente-pie">
+        <button type="button" class="btn btn-terciario" id="btn-atras">Atrás</button>
+        <p id="asistente-pista" class="asistente-pista"></p>
+        <button type="button" class="btn btn-principal" id="btn-siguiente">Siguiente</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Panel lateral de personas (ver / crear / editar) -->
+  <div id="panel-lateral" class="panel-lateral oculto" role="dialog" aria-modal="true" aria-labelledby="lateral-titulo">
+    <div class="panel-lateral-fondo" data-accion="cerrar-lateral"></div>
+    <div class="panel-lateral-caja">
+      <header class="lateral-cabecera">
+        <h2 id="lateral-titulo">Nueva persona</h2>
+        <button type="button" class="btn-icono" data-accion="cerrar-lateral" aria-label="Cerrar">✕</button>
+      </header>
+
+      <div id="vista-persona" class="lateral-cuerpo oculto"></div>
+
+      <form id="form-persona" class="lateral-cuerpo formulario oculto" autocomplete="off" novalidate>
+        <label>Nombre<input type="text" id="persona-nombre" placeholder="Ej: Ana" /></label>
+
+        <p class="campo-etiqueta">Relación</p>
+        <div id="opciones-relacion" class="chips"></div>
+        <input type="text" id="persona-relacion-otra" class="oculto" placeholder="Escribe la relación" aria-label="Otra relación" />
+
+        <p class="campo-etiqueta">Cumpleaños <span class="texto-suave">(opcional)</span></p>
+        <div id="persona-cumpleanos" class="selector-dia-mes"></div>
+
+        <p class="campo-etiqueta">Fechas importantes <span class="texto-suave">(aniversarios, el día que se conocieron…)</span></p>
+        <div id="lista-fechas-form" class="lista-fechas-form"></div>
+        <button type="button" class="enlace" id="btn-agregar-fecha">+ Agregar fecha</button>
+
+        <label>Comida favorita <span class="texto-suave">(opcional)</span><input type="text" id="persona-comida" placeholder="Ej: Pizza" /></label>
+        <label>Correo <span class="texto-suave">(opcional, para invitarla en Google Calendar)</span><input type="email" id="persona-correo" placeholder="Ej: ana@correo.com" /></label>
+        <label>Notas <span class="texto-suave">(opcional)</span><textarea id="persona-notas" rows="3" placeholder="Alergias, gustos, tallas… lo que quieras recordar"></textarea></label>
+
+        <div id="mensaje-persona" class="mensaje oculto" role="alert"></div>
+        <div class="lateral-acciones">
+          <button type="button" class="btn btn-terciario" data-accion="cerrar-lateral">Cancelar</button>
+          <button type="submit" class="btn btn-principal" id="btn-guardar-persona">Guardar persona</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

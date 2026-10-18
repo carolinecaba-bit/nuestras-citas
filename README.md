@@ -11,6 +11,13 @@ gratuitos y sin necesidad de API Key.
 
 ## ¿Qué hace?
 
+La app es un dashboard con cuatro pestañas: **Inicio** (próxima cita con su
+clima, próximos cumpleaños, fechas importantes, personas con las que hace
+tiempo no planeas nada y tus números), **Citas** (próximas y pasadas),
+**Personas** e **Ideas**. Las citas se crean con un asistente paso a paso:
+qué, cuándo (atajos de fecha, calendario propio con los cumpleaños marcados
+y horas por franja), con quién, dónde (con tus lugares guardados) y detalles.
+
 1. **Inicia sesión con Google**: tus citas y perfiles son privados: solo tú
    (con la cuenta de Google que uses) los ves. No hay contraseñas que
    manejar ni guardar.
@@ -278,6 +285,7 @@ nuestras-citas/
 ├── db.js                 # Persistencia de citas (JSON, escritura atomica, filtrado por usuario)
 ├── usuarios.js            # Persistencia de usuarios (JSON, escritura atomica)
 ├── personas.js             # Persistencia de perfiles de personas (JSON, escritura atomica, filtrado por usuario)
+├── lugaresGuardados.js     # Lugares favoritos y recientes de cada usuario (JSON, escritura atomica)
 ├── auth.js                # Flujo OAuth con Google (intercambio en el backend) + middleware de sesion
 ├── correo.js               # Correo de bienvenida via Resend (no bloquea el login)
 ├── pagos.js                # Stripe: crea la sesion de Checkout y maneja el webhook
@@ -289,11 +297,11 @@ nuestras-citas/
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
 ├── package.json
 ├── .env.example
-├── data/                   # Se crea automaticamente; guarda citas.json, personas.json y usuarios.json
+├── data/                   # Se crea automaticamente; guarda citas.json, personas.json, usuarios.json y lugares-guardados.json
 ├── logs/                   # Se crea automaticamente; un archivo AAAAMMDD.log por dia
 ├── public/
-│   ├── index.html          # Puerta de login + perfiles + formulario + lista de citas
-│   ├── style.css             # Identidad visual (Fraunces + Karla, paleta rosa/dorado)
+│   ├── index.html          # Puerta de login + dashboard con pestañas + asistente de nueva cita + panel de personas
+│   ├── style.css             # Identidad visual (Fraunces + Karla, paleta índigo/dorado)
 │   └── app.js                # Logica del frontend
 └── README.md
 ```
@@ -412,6 +420,19 @@ hasta 5 ideas para esa categoría (título, resumen corto, fuente y
 enlace). Usa el caché en disco si tiene menos de `TOPS_CACHE_HORAS`; si
 no, busca en vivo con SerpApi y actualiza el caché.
 
+### Lugares guardados
+
+- **`GET /api/lugares-guardados`** — favoritos primero, luego los 5 recientes.
+  Los recientes se guardan solos cada vez que se crea una cita.
+- **`POST /api/lugares-guardados`** — `{ nombre, lat, lon, alias? }`: guarda un
+  lugar como favorito (con un nombre corto opcional, como "Casa").
+- **`PATCH /api/lugares-guardados/:id`** — `{ favorito?, alias? }`.
+- **`DELETE /api/lugares-guardados/:id`** — lo quita de la lista.
+
+Las personas aceptan además `fechasImportantes`: hasta 10 `{ nombre, fecha }`
+que se repiten cada año (aniversarios, etc.). En cumpleaños y fechas
+importantes sin año conocido se guarda el año 1904 como marcador.
+
 ## Manejo de errores
 
 - **Backend:** try/catch en cada llamada externa, `AbortController` para
@@ -465,6 +486,11 @@ no, busca en vivo con SerpApi y actualiza el caché.
 El archivo `.env` **no** debe subirse a control de versiones.
 
 ## Límites conocidos
+
+- Los datos se guardan en archivos JSON dentro del servidor. En el plan
+  gratuito de Render ese disco no es persistente: citas, personas y lugares
+  guardados se borran en cada deploy o reinicio. Para producción real hace
+  falta una base de datos (por ejemplo, Supabase o Postgres).
 
 - El pronóstico de Open-Meteo solo llega hasta ~16 días hacia adelante.
 - El archivo histórico de Open-Meteo suele tener unos días de retraso; para

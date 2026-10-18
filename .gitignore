@@ -6,3 +6,4 @@ data/eventos-stripe.json
 data/personas.json
 data/tops-cache.json
 logs/*.log
+data/lugares-guardados.json
