@@ -2,131 +2,113 @@
 // Lugares guardados por usuario: "Recientes" (los ultimos usados, se
 // guardan solos al crear una cita) y "Favoritos" (marcados con estrella,
 // con un nombre corto opcional como "Casa" o "Santiago").
-// Mismo patron de archivo JSON con escritura atomica que personas.js.
+// Persistencia en Postgres; cada consulta filtra por usuario_id.
 // -----------------------------------------------------------------------
-const fs = require('fs');
-const fsPromises = fs.promises;
-const path = require('path');
-const crypto = require('crypto');
+const { consulta } = require('./basedatos');
 
-const RUTA_ARCHIVO = path.join(__dirname, 'data', 'lugares-guardados.json');
 const MAX_RECIENTES = 5;
 const MAX_FAVORITOS = 20;
 const ALIAS_MAX = 30;
 
-let colaEscritura = Promise.resolve();
-
-async function asegurarArchivo() {
-  await fsPromises.mkdir(path.dirname(RUTA_ARCHIVO), { recursive: true });
-  try {
-    await fsPromises.access(RUTA_ARCHIVO);
-  } catch (err) {
-    await fsPromises.writeFile(RUTA_ARCHIVO, '[]', 'utf-8');
-  }
-}
-
-async function leerTodos() {
-  await asegurarArchivo();
-  try {
-    const datos = JSON.parse(await fsPromises.readFile(RUTA_ARCHIVO, 'utf-8'));
-    if (!Array.isArray(datos)) throw new Error('El contenido no es un arreglo');
-    return datos;
-  } catch (err) {
-    console.error('[lugares-guardados] El archivo estaba vacio o corrupto, se reinicia:', err.message);
-    await fsPromises.writeFile(RUTA_ARCHIVO, '[]', 'utf-8');
-    return [];
-  }
-}
-
-function encolarEscritura(tarea) {
-  const resultado = colaEscritura.then(tarea, tarea);
-  colaEscritura = resultado.catch(() => {});
-  return resultado;
-}
-
-async function guardarTodos(lugares) {
-  return encolarEscritura(async () => {
-    const rutaTemporal = `${RUTA_ARCHIVO}.tmp`;
-    await fsPromises.writeFile(rutaTemporal, JSON.stringify(lugares, null, 2), 'utf-8');
-    await fsPromises.rename(rutaTemporal, RUTA_ARCHIVO);
-  });
-}
-
-// Dos busquedas del mismo sitio pueden diferir en decimales minimos:
-// redondeando a 3 decimales (~100 m) se tratan como el mismo lugar.
-function mismaPosicion(a, b) {
-  return Math.round(a.lat * 1000) === Math.round(b.lat * 1000) &&
-    Math.round(a.lon * 1000) === Math.round(b.lon * 1000);
-}
-
-function ordenar(lista) {
-  return lista.sort((a, b) => {
-    if (a.favorito !== b.favorito) return a.favorito ? -1 : 1;
-    return (b.usadoEn || '').localeCompare(a.usadoEn || '');
-  });
+function aLugar(fila) {
+  return {
+    id: fila.id,
+    usuarioId: fila.usuario_id,
+    nombre: fila.nombre,
+    alias: fila.alias,
+    lat: fila.lat,
+    lon: fila.lon,
+    favorito: fila.favorito,
+    usadoEn: fila.usado_en.toISOString()
+  };
 }
 
 /** Deja solo los MAX_RECIENTES no favoritos mas recientes del usuario. */
-function recortarRecientes(todos, usuarioId) {
-  const recientes = todos
-    .filter((l) => l.usuarioId === usuarioId && !l.favorito)
-    .sort((a, b) => (b.usadoEn || '').localeCompare(a.usadoEn || ''));
-  const sobrantes = new Set(recientes.slice(MAX_RECIENTES).map((l) => l.id));
-  return todos.filter((l) => !sobrantes.has(l.id));
+async function recortarRecientes(usuarioId) {
+  await consulta(
+    `DELETE FROM lugares_guardados WHERE id IN (
+       SELECT id FROM lugares_guardados WHERE usuario_id = $1 AND NOT favorito
+       ORDER BY usado_en DESC OFFSET $2
+     )`,
+    [usuarioId, MAX_RECIENTES]
+  );
 }
 
 async function obtenerLugares(usuarioId) {
-  const todos = await leerTodos();
-  return ordenar(todos.filter((l) => l.usuarioId === usuarioId));
+  const { rows } = await consulta(
+    'SELECT * FROM lugares_guardados WHERE usuario_id = $1 ORDER BY favorito DESC, usado_en DESC',
+    [usuarioId]
+  );
+  return rows.map(aLugar);
 }
 
 /**
- * Registra que el usuario uso un lugar: si ya existe (misma posicion),
- * actualiza la fecha de uso; si no, lo crea como reciente. Con
- * `favorito: true` ademas lo marca como favorito.
+ * Registra que el usuario uso un lugar: si ya existe (misma posicion,
+ * redondeada a ~100 m), actualiza la fecha de uso; si no, lo crea como
+ * reciente. Con `favorito: true` ademas lo marca como favorito.
  */
 async function registrarUso(usuarioId, { nombre, lat, lon }, { favorito = false, alias = null } = {}) {
-  let todos = await leerTodos();
-  const ahora = new Date().toISOString();
-  let lugar = todos.find((l) => l.usuarioId === usuarioId && mismaPosicion(l, { lat, lon }));
+  const { rows: existentes } = await consulta(
+    `SELECT * FROM lugares_guardados
+     WHERE usuario_id = $1 AND round(lat * 1000) = round($2::numeric * 1000) AND round(lon * 1000) = round($3::numeric * 1000)
+     LIMIT 1`,
+    [usuarioId, lat, lon]
+  );
 
-  if (lugar) {
-    lugar.usadoEn = ahora;
-    if (favorito) lugar.favorito = true;
-    if (alias !== null) lugar.alias = alias;
+  let fila;
+  if (existentes[0]) {
+    const { rows } = await consulta(
+      `UPDATE lugares_guardados SET usado_en = now(),
+         favorito = favorito OR $2,
+         alias = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE alias END
+       WHERE id = $1 RETURNING *`,
+      [existentes[0].id, favorito, alias]
+    );
+    fila = rows[0];
   } else {
-    if (favorito && todos.filter((l) => l.usuarioId === usuarioId && l.favorito).length >= MAX_FAVORITOS) {
-      const err = new Error(`Puedes tener hasta ${MAX_FAVORITOS} lugares favoritos.`);
-      err.esLimite = true;
-      throw err;
+    if (favorito) {
+      const { rows } = await consulta('SELECT count(*)::int AS n FROM lugares_guardados WHERE usuario_id = $1 AND favorito', [usuarioId]);
+      if (rows[0].n >= MAX_FAVORITOS) {
+        const err = new Error(`Puedes tener hasta ${MAX_FAVORITOS} lugares favoritos.`);
+        err.esLimite = true;
+        throw err;
+      }
     }
-    lugar = { id: crypto.randomUUID(), usuarioId, nombre, alias, lat, lon, favorito, usadoEn: ahora };
-    todos.push(lugar);
+    const { rows } = await consulta(
+      `INSERT INTO lugares_guardados (usuario_id, nombre, alias, lat, lon, favorito)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [usuarioId, nombre, alias, lat, lon, favorito]
+    );
+    fila = rows[0];
   }
 
-  todos = recortarRecientes(todos, usuarioId);
-  await guardarTodos(todos);
-  return lugar;
+  await recortarRecientes(usuarioId);
+  return aLugar(fila);
 }
 
 async function actualizarLugar(id, usuarioId, { favorito, alias }) {
-  let todos = await leerTodos();
-  const lugar = todos.find((l) => l.id === id && l.usuarioId === usuarioId);
-  if (!lugar) return null;
-  if (typeof favorito === 'boolean') lugar.favorito = favorito;
-  if (alias !== undefined) lugar.alias = alias;
-  todos = recortarRecientes(todos, usuarioId);
-  await guardarTodos(todos);
-  return todos.find((l) => l.id === id) || null;
+  const cambios = [];
+  const valores = [id, usuarioId];
+  if (typeof favorito === 'boolean') { valores.push(favorito); cambios.push(`favorito = $${valores.length}`); }
+  if (alias !== undefined) { valores.push(alias); cambios.push(`alias = $${valores.length}`); }
+  if (cambios.length === 0) {
+    const { rows } = await consulta('SELECT * FROM lugares_guardados WHERE id = $1 AND usuario_id = $2', valores);
+    return rows[0] ? aLugar(rows[0]) : null;
+  }
+  const { rows } = await consulta(
+    `UPDATE lugares_guardados SET ${cambios.join(', ')} WHERE id = $1 AND usuario_id = $2 RETURNING *`,
+    valores
+  );
+  if (!rows[0]) return null;
+  // Si se quito de favoritos, pasa a recientes y puede sobrar.
+  await recortarRecientes(usuarioId);
+  const { rows: final } = await consulta('SELECT * FROM lugares_guardados WHERE id = $1', [id]);
+  return final[0] ? aLugar(final[0]) : null;
 }
 
 async function eliminarLugar(id, usuarioId) {
-  const todos = await leerTodos();
-  const indice = todos.findIndex((l) => l.id === id && l.usuarioId === usuarioId);
-  if (indice === -1) return false;
-  todos.splice(indice, 1);
-  await guardarTodos(todos);
-  return true;
+  const { rowCount } = await consulta('DELETE FROM lugares_guardados WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+  return rowCount > 0;
 }
 
 module.exports = { ALIAS_MAX, obtenerLugares, registrarUso, actualizarLugar, eliminarLugar };

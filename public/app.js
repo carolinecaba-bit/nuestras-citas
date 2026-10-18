@@ -1596,7 +1596,17 @@ function generarUrlGoogleCalendar(cita, persona) {
 // -----------------------------------------------------------------------
 // Sesion (login / logout con Google) y pagos
 // -----------------------------------------------------------------------
+/** La postal de ejemplo de la portada siempre muestra el proximo sabado. */
+function prepararPostalDeMuestra() {
+  const sabado = proximoSabado(hoy());
+  const dias = diasHasta(aISO(sabado));
+  $('muestra-dia').textContent = sabado.getDate();
+  $('muestra-mes').textContent = MESES[sabado.getMonth()];
+  $('muestra-cuenta').textContent = `${dias === 0 ? 'Hoy' : dias === 1 ? 'Mañana' : 'Este sábado'}, 4:00 p.m.`;
+}
+
 function mostrarPuertaLogin(mensaje) {
+  prepararPostalDeMuestra();
   $('contenido-app').classList.add('oculto');
   $('puerta-login').classList.remove('oculto');
   if (mensaje) mostrarMensaje($('puerta-mensaje'), mensaje, 'info');
@@ -1673,8 +1683,7 @@ async function iniciar() {
       renderizarTodo();
     } else if (!data.loginConfigurado) {
       mostrarPuertaLogin('El inicio de sesión con Google todavía no está configurado en este servidor.');
-      $('btn-login-puerta').style.pointerEvents = 'none';
-      $('btn-login-puerta').style.opacity = '0.5';
+      document.querySelectorAll('.portada .btn-google').forEach((b) => b.classList.add('desactivado'));
     } else {
       mostrarPuertaLogin();
     }

@@ -1,9 +1,16 @@
 require('dotenv').config();
 
+if (!process.env.DATABASE_URL) {
+  console.error('\nFalta DATABASE_URL: agrega la conexion de Neon en tu .env (local) o en la pestaña Environment de Render.\nEjemplo: DATABASE_URL=postgresql://usuario:clave@host/neondb?sslmode=require\n');
+  process.exit(1);
+}
+
 const express = require('express');
 const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
+const basedatos = require('./basedatos');
 const db = require('./db');
 const { TIPOS_CITA, obtenerTipoPorId } = require('./analizador');
 const { buscarLugares, ErrorServicioLugares } = require('./lugares');
@@ -114,6 +121,13 @@ app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), (req, re
 
 app.use(express.json());
 app.use(session({
+  // Las sesiones viven en Postgres (tabla "sesiones"): sobreviven a
+  // reinicios y deploys de Render, que antes cerraban la sesion de todos.
+  store: new PgSession({
+    pool: basedatos.obtenerPool(),
+    tableName: 'sesiones',
+    pruneSessionInterval: 60 * 60 // limpia sesiones vencidas cada hora
+  }),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -685,7 +699,7 @@ app.get('/api/usuario-actual', async (req, res) => {
   const usuario = await usuarios.obtenerUsuarioPorId(req.session.usuarioId);
   if (!usuario) {
     // La sesion apunta a un usuario que ya no existe (raro, pero posible
-    // si se borro data/usuarios.json a mano). La limpiamos.
+    // si se borro el usuario de la base de datos). La limpiamos.
     req.session.usuarioId = null;
     return res.json({ usuario: null, loginConfigurado: auth.credencialesConfiguradas() });
   }
@@ -899,10 +913,22 @@ app.delete('/api/lugares-guardados/:id', auth.requiereSesion, async (req, res) =
 
 app.get('/api/health', (_req, res) => res.json({ estado: 'ok' }));
 
-app.listen(PORT, () => {
+async function arrancar() {
+  try {
+    await basedatos.inicializarEsquema();
+  } catch (err) {
+    console.error(`\nNo se pudo conectar a la base de datos: ${err.message}\n`);
+    logger.error({ actor: 'sistema', funcion: 'arranque', output: { error: err.message }, mensaje: 'No se pudo conectar a la base de datos' });
+    process.exit(1);
+  }
+
+  app.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
   logger.info({ actor: 'sistema', funcion: 'arranque', output: { puerto: PORT }, mensaje: 'Servidor iniciado' });
   if (!OPEN_METEO_API_KEY) {
     console.log('Nota: no se configuro OPEN_METEO_API_KEY. Se usara el servicio gratuito de Open-Meteo.');
   }
-});
+  });
+}
+
+arrancar();

@@ -87,10 +87,9 @@ y horas por franja), con quién, dónde (con tus lugares guardados) y detalles.
 El frontend nunca llama a Open-Meteo, OpenStreetMap ni Google directamente;
 llama a nuestro propio servidor, que:
 
-1. Guarda las citas, los perfiles y los usuarios en archivos locales
-   (`data/citas.json`, `data/personas.json`, `data/usuarios.json`), con
-   escritura atómica para no corromper el archivo si el proceso se
-   interrumpe.
+1. Guarda usuarios, personas, citas, lugares guardados, eventos de Stripe
+   y sesiones de login en una base de datos Postgres (Neon). Cada consulta
+   filtra por el usuario de la sesión: nadie puede leer datos ajenos.
 2. Intercambia el código de autorización de Google por un token **del
    lado del servidor** — el Client Secret de Google nunca toca el
    navegador.
@@ -241,6 +240,26 @@ distinta. Además, la forma de la respuesta la garantiza un esquema Zod que
 viaja en la petición (salida estructurada): solo se aceptan un título y
 una descripción dentro de un límite de caracteres.
 
+## Configurar la base de datos (Neon)
+
+La app guarda todo en Postgres. Se usa [Neon](https://neon.com) porque su
+plan gratuito no vence y la base se suspende sola cuando nadie la usa.
+
+1. Crea una cuenta en neon.com y un proyecto nuevo (por ejemplo,
+   `nuestras-citas`), en la región más cercana a tu servicio de Render.
+2. El proyecto trae una rama `main`: esa es la de **producción**.
+3. Crea una segunda rama llamada `dev` (pestaña **Branches** → **New
+   branch**): esa es para probar en local sin tocar los datos reales.
+4. En **Connect** (o **Connection string**) de cada rama, copia la URL de
+   conexión. Se ve así:
+   `postgresql://usuario:clave@ep-xxxx.region.aws.neon.tech/neondb?sslmode=require`
+5. Pon la de `dev` en tu `.env` y la de `main` en la pestaña
+   **Environment** de Render, en ambos casos como `DATABASE_URL`.
+
+Las tablas se crean solas la primera vez que arranca el servidor. Si
+tenías datos en los archivos JSON de `data/`, cópialos a la base con
+`node migrar-json.js` (no duplica si lo corres más de una vez).
+
 ## Instalación
 
 ```bash
@@ -252,6 +271,7 @@ Edita `.env`:
 
 ```
 PORT=3000
+DATABASE_URL=postgresql://usuario:clave@host/neondb?sslmode=require
 OPEN_METEO_API_KEY=
 APP_BASE_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=tu_client_id
@@ -265,9 +285,10 @@ SERPAPI_API_KEY=
 TOPS_CACHE_HORAS=24
 ```
 
-`SESSION_SECRET` puede generarse con `openssl rand -hex 32`. Si la dejas
-vacía, el servidor genera una temporal al arrancar (funciona, pero las
-sesiones se cierran cada vez que el servidor se reinicia).
+`SESSION_SECRET` puede generarse con `openssl rand -hex 32`. Configúrala
+siempre, también en Render: si la dejas vacía, el servidor genera una
+temporal al arrancar y todas las sesiones dejan de valer en cada reinicio,
+aunque estén guardadas en la base de datos.
 
 ## Ejecutar
 
@@ -282,10 +303,12 @@ Abre [http://localhost:3000](http://localhost:3000).
 ```
 nuestras-citas/
 ├── server.js            # Backend Express: rutas, sesiones, validaciones, orquesta clima y lugares
-├── db.js                 # Persistencia de citas (JSON, escritura atomica, filtrado por usuario)
-├── usuarios.js            # Persistencia de usuarios (JSON, escritura atomica)
-├── personas.js             # Persistencia de perfiles de personas (JSON, escritura atomica, filtrado por usuario)
-├── lugaresGuardados.js     # Lugares favoritos y recientes de cada usuario (JSON, escritura atomica)
+├── basedatos.js          # Conexion a Postgres (DATABASE_URL) y creacion automatica de las tablas
+├── migrar-json.js        # Copia una sola vez los datos de data/*.json a la base
+├── db.js                 # Citas en Postgres (filtrado por usuario)
+├── usuarios.js            # Usuarios en Postgres
+├── personas.js             # Personas en Postgres (filtrado por usuario)
+├── lugaresGuardados.js     # Lugares favoritos y recientes en Postgres
 ├── auth.js                # Flujo OAuth con Google (intercambio en el backend) + middleware de sesion
 ├── correo.js               # Correo de bienvenida via Resend (no bloquea el login)
 ├── pagos.js                # Stripe: crea la sesion de Checkout y maneja el webhook
@@ -297,7 +320,7 @@ nuestras-citas/
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
 ├── package.json
 ├── .env.example
-├── data/                   # Se crea automaticamente; guarda citas.json, personas.json, usuarios.json y lugares-guardados.json
+├── data/                   # Se crea automaticamente; solo guarda el cache de Ideas (tops-cache.json)
 ├── logs/                   # Se crea automaticamente; un archivo AAAAMMDD.log por dia
 ├── public/
 │   ├── index.html          # Puerta de login + dashboard con pestañas + asistente de nueva cita + panel de personas
@@ -406,8 +429,8 @@ están configuradas, o la IA falla o tarda más de 20 segundos, devuelve
 
 ### `POST /webhooks/stripe`
 Recibido directamente por Stripe (no por el frontend). Verifica la firma
-del evento, registra **todos** los eventos recibidos en
-`data/eventos-stripe.json`, y si el tipo es `checkout.session.completed`,
+del evento, registra **todos** los eventos recibidos en la tabla
+`eventos_stripe` (los últimos 500), y si el tipo es `checkout.session.completed`,
 envía un correo de agradecimiento al correo de quien pagó — sin esperar
 a que ese correo termine de enviarse antes de responderle a Stripe.
 
@@ -472,7 +495,8 @@ importantes sin año conocido se guarda el año 1904 como marcador.
 | `APP_BASE_URL`           | Sí, para el login | URL pública de la app (sin slash final), usada en el redirect de Google |
 | `GOOGLE_CLIENT_ID`       | Sí, para el login | Client ID de Google Cloud Console                                |
 | `GOOGLE_CLIENT_SECRET`   | Sí, para el login | Client Secret de Google Cloud Console                             |
-| `SESSION_SECRET`         | Recomendada | Clave para firmar la cookie de sesión                                |
+| `DATABASE_URL`           | Sí          | Conexión a Postgres (Neon), con `?sslmode=require`                    |
+| `SESSION_SECRET`         | Sí          | Clave para firmar la cookie de sesión                                |
 | `RESEND_API_KEY`         | No          | API Key de Resend; sin ella, el correo de bienvenida se omite        |
 | `CORREO_REMITENTE`       | No          | Remitente del correo (por defecto, el de pruebas de Resend)          |
 | `STRIPE_SECRET_KEY`      | No          | Clave secreta de Stripe (modo prueba); sin ella, "Apoyar" da un aviso claro |
@@ -487,10 +511,10 @@ El archivo `.env` **no** debe subirse a control de versiones.
 
 ## Límites conocidos
 
-- Los datos se guardan en archivos JSON dentro del servidor. En el plan
-  gratuito de Render ese disco no es persistente: citas, personas y lugares
-  guardados se borran en cada deploy o reinicio. Para producción real hace
-  falta una base de datos (por ejemplo, Supabase o Postgres).
+- El plan gratuito de Neon incluye 100 horas de cómputo y 0.5 GB por
+  proyecto, y no hace backups automáticos: solo permite restaurar hasta
+  6 horas atrás. La primera consulta después de unos minutos sin uso
+  tarda un poco más mientras la base "despierta".
 
 - El pronóstico de Open-Meteo solo llega hasta ~16 días hacia adelante.
 - El archivo histórico de Open-Meteo suele tener unos días de retraso; para
@@ -503,12 +527,9 @@ El archivo `.env` **no** debe subirse a control de versiones.
   los tres fallan, el error queda registrado con el detalle exacto de
   cada uno en los logs del servidor, y el usuario ve un mensaje claro
   para reintentar.
-- Las sesiones se guardan en memoria del proceso: se cierran todas si el
-  servidor se reinicia. En hosts de plan gratuito (como Render Free) el
-  disco también es efímero, así que `data/citas.json`, `data/personas.json`,
-  `data/usuarios.json`, `data/eventos-stripe.json` y `data/tops-cache.json`
-  pueden reiniciarse a vacío cuando el servicio se reinicia o "despierta"
-  tras estar inactivo (para "Ideas y qué hacer", esto puede provocar
+- En Render Free el disco es efímero: `data/tops-cache.json` se reinicia
+  a vacío cuando el servicio se reinicia o "despierta" tras estar
+  inactivo (para "Ideas y qué hacer", esto puede provocar
   alguna búsqueda de más de lo esperado contra la cuota gratuita de
   SerpApi). Por el mismo motivo, los archivos de `logs/` se pierden en
   cada reinicio en Render Free — para un historial que sobreviva eso,

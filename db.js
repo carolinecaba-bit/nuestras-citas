@@ -1,102 +1,52 @@
-const fs = require('fs');
-const fsPromises = fs.promises;
-const path = require('path');
-const crypto = require('crypto');
+// -----------------------------------------------------------------------
+// Citas: persistencia en Postgres. Cada consulta filtra por usuario_id,
+// asi que nadie puede leer ni borrar citas de otra cuenta.
+// -----------------------------------------------------------------------
+const { consulta } = require('./basedatos');
 
-const RUTA_ARCHIVO = path.join(__dirname, 'data', 'citas.json');
-
-// Cola simple para serializar escrituras y evitar que dos peticiones
-// concurrentes se pisen entre si al escribir el archivo.
-let colaEscritura = Promise.resolve();
-
-async function asegurarArchivo() {
-  await fsPromises.mkdir(path.dirname(RUTA_ARCHIVO), { recursive: true });
-  try {
-    await fsPromises.access(RUTA_ARCHIVO);
-  } catch (err) {
-    await fsPromises.writeFile(RUTA_ARCHIVO, '[]', 'utf-8');
-  }
-}
-
-async function leerCitas() {
-  await asegurarArchivo();
-  try {
-    const contenido = await fsPromises.readFile(RUTA_ARCHIVO, 'utf-8');
-    const datos = JSON.parse(contenido);
-    if (!Array.isArray(datos)) {
-      throw new Error('El contenido no es un arreglo');
-    }
-    return datos;
-  } catch (err) {
-    console.error('[db] El archivo de citas estaba vacio o corrupto, se reinicia a una lista vacia:', err.message);
-    await fsPromises.writeFile(RUTA_ARCHIVO, '[]', 'utf-8');
-    return [];
-  }
-}
-
-function encolarEscritura(tarea) {
-  const resultado = colaEscritura.then(tarea, tarea);
-  // Si la tarea falla, no queremos que la cola quede "envenenada" para siempre.
-  colaEscritura = resultado.catch(() => {});
-  return resultado;
-}
-
-async function guardarCitas(citas) {
-  return encolarEscritura(async () => {
-    const contenido = JSON.stringify(citas, null, 2);
-    const rutaTemporal = `${RUTA_ARCHIVO}.tmp`;
-    // Escritura atomica: primero a un archivo temporal, luego renombrar.
-    // Asi, si el proceso se interrumpe a mitad de camino, el archivo
-    // original nunca queda a medio escribir / corrupto.
-    await fsPromises.writeFile(rutaTemporal, contenido, 'utf-8');
-    await fsPromises.rename(rutaTemporal, RUTA_ARCHIVO);
-  });
+function aCita(fila) {
+  return {
+    id: fila.id,
+    usuarioId: fila.usuario_id,
+    titulo: fila.titulo,
+    tipo: fila.tipo,
+    personaId: fila.persona_id,
+    fecha: fila.fecha,
+    hora: fila.hora,
+    ubicacion: fila.ubicacion,
+    lugarSugerido: fila.lugar_sugerido,
+    creadoEn: fila.creado_en.toISOString()
+  };
 }
 
 async function obtenerCitas(usuarioId) {
-  const citas = await leerCitas();
-  return citas
-    .filter((c) => c.usuarioId === usuarioId)
-    .sort((a, b) => {
-      const claveA = `${a.fecha}T${a.hora || '00:00'}`;
-      const claveB = `${b.fecha}T${b.hora || '00:00'}`;
-      return claveA.localeCompare(claveB);
-    });
+  const { rows } = await consulta(
+    `SELECT * FROM citas WHERE usuario_id = $1 ORDER BY fecha, COALESCE(hora, '00:00')`,
+    [usuarioId]
+  );
+  return rows.map(aCita);
 }
 
+// Si la cita existe pero es de otro usuario, se trata como inexistente:
+// no revelamos que existe una cita ajena.
 async function obtenerCitaPorId(id, usuarioId) {
-  const citas = await leerCitas();
-  const cita = citas.find((c) => c.id === id) || null;
-  // Si la cita existe pero pertenece a otro usuario, la tratamos como
-  // inexistente: no revelamos que existe una cita ajena.
-  if (cita && cita.usuarioId !== usuarioId) return null;
-  return cita;
+  const { rows } = await consulta('SELECT * FROM citas WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+  return rows[0] ? aCita(rows[0]) : null;
 }
 
-async function crearCita(datosCita) {
-  const citas = await leerCitas();
-  const nuevaCita = {
-    id: crypto.randomUUID(),
-    ...datosCita,
-    creadoEn: new Date().toISOString()
-  };
-  citas.push(nuevaCita);
-  await guardarCitas(citas);
-  return nuevaCita;
+async function crearCita(datos) {
+  const { rows } = await consulta(
+    `INSERT INTO citas (usuario_id, titulo, tipo, persona_id, fecha, hora, ubicacion, lugar_sugerido)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [datos.usuarioId, datos.titulo, datos.tipo, datos.personaId, datos.fecha, datos.hora,
+      JSON.stringify(datos.ubicacion), datos.lugarSugerido ? JSON.stringify(datos.lugarSugerido) : null]
+  );
+  return aCita(rows[0]);
 }
 
 async function eliminarCita(id, usuarioId) {
-  const citas = await leerCitas();
-  const indice = citas.findIndex((c) => c.id === id && c.usuarioId === usuarioId);
-  if (indice === -1) return false;
-  citas.splice(indice, 1);
-  await guardarCitas(citas);
-  return true;
+  const { rowCount } = await consulta('DELETE FROM citas WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+  return rowCount > 0;
 }
 
-module.exports = {
-  obtenerCitas,
-  obtenerCitaPorId,
-  crearCita,
-  eliminarCita
-};
+module.exports = { obtenerCitas, obtenerCitaPorId, crearCita, eliminarCita };
