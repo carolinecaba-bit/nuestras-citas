@@ -16,34 +16,44 @@ const path = require('path');
 
 const RUTA_CACHE = path.join(__dirname, 'data', 'tops-cache.json');
 const SERPAPI_URL = 'https://serpapi.com/search.json';
-const TIMEOUT_MS = 10000;
+// Una busqueda nueva en SerpApi con ubicacion (Republica Dominicana) puede
+// tardar bastante; como el resultado se guarda en cache por 24 horas,
+// esta espera solo ocurre la primera vez por categoria.
+const TIMEOUT_MS = 30000;
 const HORAS_CACHE_DEFECTO = 24;
 
+// Categorias pensadas para Republica Dominicana. Los ids terminan en
+// "-rd" para que el cache de las categorias anteriores no se reutilice.
 const CATEGORIAS = [
   {
-    id: 'primera-cita',
-    etiqueta: '5 ideas de primera cita',
-    consulta: 'ideas originales y consejos para una primera cita'
+    id: 'citas-santo-domingo-rd',
+    etiqueta: 'Planes en Santo Domingo',
+    consulta: 'lugares para una cita en pareja en Santo Domingo República Dominicana'
   },
   {
-    id: 'dias-nublados',
-    etiqueta: 'Qué hacer en días nublados o lluviosos',
-    consulta: 'planes en pareja para un dia lluvioso o nublado'
+    id: 'santiago-rd',
+    etiqueta: 'Planes en Santiago',
+    consulta: 'qué hacer en pareja en Santiago de los Caballeros'
   },
   {
-    id: 'planes-economicos',
+    id: 'dias-lluviosos-rd',
+    etiqueta: 'Días de lluvia',
+    consulta: 'planes bajo techo para un día lluvioso en República Dominicana'
+  },
+  {
+    id: 'planes-economicos-rd',
     etiqueta: 'Planes económicos',
-    consulta: 'planes economicos y gratis para una cita en pareja'
+    consulta: 'planes gratis o baratos en pareja en República Dominicana'
   },
   {
-    id: 'regalos-cumpleanos',
-    etiqueta: 'Ideas de regalos de cumpleaños',
-    consulta: 'ideas originales de regalos de cumpleaños para pareja'
+    id: 'escapadas-rd',
+    etiqueta: 'Escapadas de fin de semana',
+    consulta: 'escapadas de fin de semana en pareja en República Dominicana'
   },
   {
-    id: 'cozy-finde',
-    etiqueta: 'Planes acogedores para el fin de semana',
-    consulta: 'planes cozy y relajados para el fin de semana en pareja'
+    id: 'regalos-rd',
+    etiqueta: 'Regalos de cumpleaños',
+    consulta: 'ideas de regalos de cumpleaños originales República Dominicana'
   }
 ];
 
@@ -114,6 +124,10 @@ async function buscarEnVivo(consulta) {
   url.searchParams.set('engine', 'google');
   url.searchParams.set('q', consulta);
   url.searchParams.set('hl', 'es');
+  // Resultados de Google Republica Dominicana, como los veria alguien aqui.
+  url.searchParams.set('gl', 'do');
+  url.searchParams.set('google_domain', 'google.com.do');
+  url.searchParams.set('location', 'Dominican Republic');
   url.searchParams.set('num', '6');
   url.searchParams.set('api_key', process.env.SERPAPI_API_KEY);
 

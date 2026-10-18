@@ -69,13 +69,12 @@ y horas por franja), con quién, dónde (con tus lugares guardados) y detalles.
     precargada como invitada. El evento nunca se crea solo: siempre hay
     que confirmarlo en Google Calendar. No requiere ningún permiso nuevo
     de Google ni backend adicional.
-13. **Sugerir plan con IA**: botón "✨ Sugerir con IA" en el formulario de
-    citas (se activa al elegir tipo, fecha y ubicación). Genera un título
-    y una breve idea personalizada usando los datos de la persona elegida
-    (si hay una), el clima del día y el lugar, con el [AI SDK de
-    Vercel](https://ai-sdk.dev) y salida estructurada (esquema Zod). El
-    proveedor (Google Gemini o Groq) se elige con `AI_MODEL`. La sugerencia nunca se guarda
-    sola: hay que hacer clic en "Usar este título" para aplicarla.
+13. **Agente de ideas con IA**: en Inicio, el bloque **Hoy** muestra el
+    clima del día en tu lugar con una frase según el clima, y el botón
+    "✨ Sugiéreme planes para hoy". En el asistente de nueva cita, el paso
+    "Qué" ofrece "✨ Sugiéreme ideas" usando la fecha, el lugar, el clima y
+    la persona elegida. Las ideas las genera un **agente con herramientas**
+    (ver la sección "El agente de ideas").
 14. **Registro de actividad (logs)**: cada petición a la app queda
     registrada en `logs/AAAAMMDD.log` (un archivo por día) con fecha,
     nivel (INFO/WARNING/ERROR), quién la hizo, en qué ruta ocurrió, qué se
@@ -209,10 +208,54 @@ configurarla, sin afectar el resto de la app.
 > más. Para un uso personal esto no debería acercarse al límite mensual,
 > pero si notas que se agota, revisa tu consumo en el Dashboard de SerpApi.
 
-## Configurar "Sugerir con IA"
+## El agente de ideas
 
-Es opcional: sin esto, el botón de sugerencia muestra un mensaje claro
-pidiendo configurarlo, sin romper el resto del formulario.
+Las ideas de planes las genera un agente (`ia.js`) con el [AI SDK de
+Vercel](https://ai-sdk.dev), un SDK neutral: el proveedor y el modelo se
+eligen **solo** con la variable `AI_MODEL` (formato `proveedor:modelo`),
+sin tocar el código.
+
+**Herramientas (tools)** que el agente decide cuándo usar:
+
+| Herramienta | Qué hace |
+| --- | --- |
+| `consultarClima` | Pronóstico real del día (Open-Meteo) |
+| `buscarLugaresCercanos` | Lugares reales cercanos por tipo de plan (OpenStreetMap) |
+| `consultarSkill` | Lee una guía de la carpeta `skills/` |
+| `entregarIdeas` | Su respuesta final, validada con un esquema Zod |
+
+**Skills:** cada archivo `.md` de `skills/` es una guía con `name` y
+`description` en el encabezado. El agente solo recibe la lista de nombres y
+descripciones, y lee el contenido completo con `consultarSkill` cuando lo
+necesita. Para agregar una skill, basta con crear un archivo nuevo con el
+mismo formato.
+
+**Errores devueltos al agente**, para que se corrija solo:
+
+1. Si una herramienta falla (por ejemplo, OpenStreetMap no responde), el
+   agente recibe `{ error, sugerencia }` y puede reintentar o seguir sin eso.
+2. Si llama a una herramienta con datos inválidos (por ejemplo, un tipo de
+   plan que no existe), el AI SDK le devuelve el error de validación.
+3. `entregarIdeas` aplica las reglas de negocio del servidor: exactamente la
+   cantidad pedida, tipos distintos, lugares que salieron de
+   `buscarLugaresCercanos` (no inventados) y nada al aire libre si hay
+   alerta de tormenta. Si algo falla, responde `{ aceptado: false, errores }`
+   y el agente corrige y vuelve a entregar (hasta 3 entregas).
+4. Si el agente termina sin entregar, el servidor le devuelve el historial
+   con un recordatorio (una vez).
+
+Cada ejecución queda en el log con el modelo, los pasos, las herramientas
+usadas, las correcciones y los tokens.
+
+**Pruebas:** `npm run test:agente` prueba el agente con el modelo simulado
+del AI SDK (sin gastar tokens): que vea y corrija errores de herramientas,
+de validación y de reglas de negocio.
+
+## Configurar el proveedor de IA
+
+
+Es opcional: sin esto, los botones de ideas muestran un mensaje claro
+pidiendo configurarlo, sin romper el resto de la app.
 
 La función usa el AI SDK de Vercel con un registro de proveedores. El
 proveedor y el modelo se eligen solo con la variable `AI_MODEL`, en el
@@ -313,8 +356,10 @@ nuestras-citas/
 ├── correo.js               # Correo de bienvenida via Resend (no bloquea el login)
 ├── pagos.js                # Stripe: crea la sesion de Checkout y maneja el webhook
 ├── eventosStripe.js         # Registro persistente de cada evento de webhook recibido
-├── tops.js                  # "Ideas y que hacer": busqueda en vivo via SerpApi + cache en disco
-├── ia.js                    # "Sugerir con IA": AI SDK + esquema Zod, modelo en AI_MODEL, registra tokens/duracion
+├── tops.js                  # Pestaña Ideas: busqueda en Google RD via SerpApi + cache en disco
+├── ia.js                    # Agente de ideas: AI SDK, herramientas, skills y correccion de errores
+├── skills/                  # Guias en Markdown que el agente consulta cuando las necesita
+├── pruebas/                 # Prueba del agente con modelo simulado (npm run test:agente)
 ├── logger.js                # Logging estructurado: fecha, nivel, actor, funcion, input, output
 ├── analizador.js           # Catalogo de tipos de plan (picnic, cena, etc.) y sus tags de OpenStreetMap
 ├── lugares.js              # Busca lugares reales cercanos via Overpass API (OpenStreetMap)
@@ -419,13 +464,14 @@ puede ser `"pronostico"`, `"historico"` o `"no_disponible"`.
 Requiere sesión. Crea una sesión de Stripe Checkout ($3 USD, "apoyo" al
 proyecto) y devuelve `{ url }` — el frontend redirige el navegador ahí.
 
-### `POST /api/sugerir-plan`
-Requiere sesión. Cuerpo: `{ tipo, personaId, fecha, ubicacion }`
-(`personaId` opcional). Devuelve `{ titulo, descripcion }` generados por
-IA a partir del tipo de plan, la persona (si se indicó), el clima de esa
-fecha/ubicación, y el lugar. Si `AI_MODEL` o la llave de su proveedor no
-están configuradas, o la IA falla o tarda más de 20 segundos, devuelve
-`503` con un mensaje claro — nunca una sugerencia a medias.
+### `POST /api/ideas`
+Requiere sesión. Cuerpo: `{ fecha, ubicacion, personaId?, cantidad?, tipoPreferido? }`.
+Devuelve `{ ideas: [{ tipo, titulo, descripcion, momento, lugar }] }`,
+generadas por el agente. `lugar` es un lugar real de OpenStreetMap o `null`.
+Si la IA no está configurada o falla, devuelve `503` con un mensaje claro.
+
+### `GET /api/clima?lat=&lon=&fecha=`
+Requiere sesión. Pronóstico de un día (lo usa el bloque Hoy).
 
 ### `POST /webhooks/stripe`
 Recibido directamente por Stripe (no por el frontend). Verifica la firma
@@ -503,7 +549,7 @@ importantes sin año conocido se guarda el año 1904 como marcador.
 | `STRIPE_WEBHOOK_SECRET`  | No          | Signing secret del endpoint de webhook en el Dashboard de Stripe     |
 | `SERPAPI_API_KEY`        | No          | API Key de SerpApi; sin ella, "Ideas y qué hacer" da un aviso claro  |
 | `TOPS_CACHE_HORAS`       | No          | Horas que se reutiliza un resultado antes de rebuscar (por defecto 24) |
-| `AI_MODEL`               | No          | Proveedor y modelo para "Sugerir con IA" (`proveedor:modelo`)         |
+| `AI_MODEL`               | No          | Proveedor y modelo del agente de ideas (`proveedor:modelo`)           |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | No    | Llave de Google Gemini (si `AI_MODEL` empieza con `google:`)          |
 | `GROQ_API_KEY`           | No          | Llave de Groq (si `AI_MODEL` empieza con `groq:`)                     |
 
@@ -535,7 +581,7 @@ El archivo `.env` **no** debe subirse a control de versiones.
   cada reinicio en Render Free — para un historial que sobreviva eso,
   revisa la pestaña "Logs" del dashboard de Render en vez del archivo.
 - Los planes gratuitos de Google y Groq tienen límites de peticiones; de
-  sobra para uso personal, pero si varias personas usan "Sugerir con IA"
+  sobra para uso personal, pero si varias personas piden ideas a la IA
   muy seguido podría alcanzarse el límite (se avisa con un mensaje claro,
   no se rompe la app).
 - La comparación de fechas (pasado/futuro) usa la fecha del servidor, no

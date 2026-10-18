@@ -278,24 +278,40 @@ app.get('/api/geocode', async (req, res) => {
   }
 
   try {
-    const url = conApiKey(new URL(GEOCODING_BASE_URL));
-    url.searchParams.set('name', q.trim());
-    url.searchParams.set('count', '5');
-    url.searchParams.set('language', 'es');
-    url.searchParams.set('format', 'json');
+    // La app es dominicana: se busca primero en RD y luego en el mundo, y
+    // los resultados de RD van arriba (asi "Santiago" encuentra primero
+    // Santiago de los Caballeros y no Santiago de Chile).
+    const pedir = async (codigoPais) => {
+      const url = conApiKey(new URL(GEOCODING_BASE_URL));
+      url.searchParams.set('name', q.trim());
+      url.searchParams.set('count', '6');
+      url.searchParams.set('language', 'es');
+      url.searchParams.set('format', 'json');
+      if (codigoPais) url.searchParams.set('countryCode', codigoPais);
+      const respuesta = await fetchConTimeout(url.toString());
+      if (!respuesta.ok) throw new ErrorServicioExterno(`estado ${respuesta.status}`);
+      return (await respuesta.json()).results || [];
+    };
 
-    const respuesta = await fetchConTimeout(url.toString());
-
-    if (!respuesta.ok) {
+    let enRD = [];
+    let enMundo = [];
+    try {
+      [enRD, enMundo] = await Promise.all([pedir('DO'), pedir(null)]);
+    } catch (errServicio) {
       return res.status(502).json({
         error: 'error_servicio_externo',
-        mensaje: `El servicio de geocodificacion respondio con estado ${respuesta.status}.`
+        mensaje: `El servicio de geocodificacion no respondio (${errServicio.message}).`
       });
     }
 
-    const data = await respuesta.json();
+    const vistos = new Set();
+    const combinados = [...enRD, ...enMundo].filter((r) => {
+      if (vistos.has(r.id)) return false;
+      vistos.add(r.id);
+      return true;
+    }).slice(0, 8);
 
-    if (!data.results || data.results.length === 0) {
+    if (combinados.length === 0) {
       return res.status(404).json({
         error: 'sin_resultados',
         mensaje: `No se encontraron ubicaciones para "${q}". Intenta con otro nombre.`
@@ -303,7 +319,7 @@ app.get('/api/geocode', async (req, res) => {
     }
 
     res.json({
-      resultados: data.results.map((r) => ({
+      resultados: combinados.map((r) => ({
         nombre: r.name,
         pais: r.country || null,
         region: r.admin1 || null,
@@ -774,7 +790,7 @@ app.get('/api/tops/:categoriaId', auth.requiereSesion, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/sugerir-plan — pide a la IA (AI SDK, modelo en AI_MODEL) un titulo + descripcion
+// Clima en texto, para las herramientas del agente de ideas
 // ---------------------------------------------------------------------------
 function climaATextoDescriptivo(resultado) {
   if (!resultado || resultado.estado === 'no_disponible') return null;
@@ -785,19 +801,91 @@ function climaATextoDescriptivo(resultado) {
   return `máxima ${Math.round(datos.temperaturaMax)}°C, mínima ${Math.round(datos.temperaturaMin)}°C${lluvia}`;
 }
 
-app.post('/api/sugerir-plan', auth.requiereSesion, async (req, res) => {
-  const { tipo, personaId, fecha, ubicacion } = req.body || {};
-
-  const tipoInfo = obtenerTipoPorId(tipo);
-  if (!tipoInfo) {
-    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'Debes indicar un tipo de plan válido.' });
+// ---------------------------------------------------------------------------
+// GET /api/clima?lat=&lon=&fecha=  — pronostico de un dia (bloque "Hoy")
+// ---------------------------------------------------------------------------
+app.get('/api/clima', auth.requiereSesion, async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  const { fecha } = req.query;
+  if (Number.isNaN(lat) || lat < -90 || lat > 90 || Number.isNaN(lon) || lon < -180 || lon > 180) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'Las coordenadas no son válidas.' });
   }
+  if (!fecha || typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'La fecha debe tener formato AAAA-MM-DD.' });
+  }
+  try {
+    res.json(await obtenerClimaParaFecha(lat, lon, fecha));
+  } catch (err) {
+    if (err instanceof ErrorServicioExterno) {
+      return res.status(502).json({ error: 'error_servicio_externo', mensaje: 'No se pudo obtener el clima en este momento.' });
+    }
+    manejarError(err, res, 'clima del dia', req);
+  }
+});
+
+// Codigos WMO, igual que en el frontend: para que el agente sepa si hay
+// alerta (tormenta, lluvia fuerte) o precaucion (lluvia ligera, niebla).
+const CODIGOS_ALERTA = [65, 82, 95, 96, 99];
+const CODIGOS_PRECAUCION = [45, 48, 51, 53, 55, 61, 63, 71, 73, 75, 80, 81];
+function categoriaDeClima(codigo) {
+  if (CODIGOS_ALERTA.includes(codigo)) return 'alerta';
+  if (CODIGOS_PRECAUCION.includes(codigo)) return 'precaucion';
+  return 'buena';
+}
+
+// Herramientas que usa el agente de ideas (ver ia.js). Se inyectan aqui
+// para que el agente no dependa de como se consulta cada servicio.
+const herramientasDelAgente = {
+  async obtenerClima(lat, lon, fecha) {
+    const resultado = await obtenerClimaParaFecha(lat, lon, fecha);
+    if (!resultado || resultado.estado === 'no_disponible') return null;
+    return { texto: climaATextoDescriptivo(resultado), categoria: categoriaDeClima(resultado.datos.codigoClima) };
+  },
+  async buscarLugares(tipoId, lat, lon) {
+    const tipo = obtenerTipoPorId(tipoId);
+    if (!tipo) return [];
+    const clave = `${tipoId}|${lat.toFixed(2)}|${lon.toFixed(2)}`;
+    const guardado = cacheLugaresAgente.get(clave);
+    if (guardado && Date.now() - guardado.en < HORAS_CACHE_LUGARES * 3600000) return guardado.lugares;
+    // OpenStreetMap puede tardar mucho (prueba 3 servidores): se le da un
+    // limite para que el agente no se quede esperando. Si se pasa, el
+    // agente recibe el error y entrega esa idea sin lugar.
+    const lugares = await Promise.race([
+      buscarLugares(tipo.tagsOverpass, lat, lon),
+      new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('OpenStreetMap tardó demasiado')), LIMITE_LUGARES_MS))
+    ]);
+    cacheLugaresAgente.set(clave, { en: Date.now(), lugares });
+    return lugares;
+  }
+};
+
+// Cache en memoria de las busquedas de lugares del agente (por tipo y
+// zona de ~1 km): pedir ideas otra vez en el mismo lugar es mucho mas rapido.
+const cacheLugaresAgente = new Map();
+const HORAS_CACHE_LUGARES = 6;
+const LIMITE_LUGARES_MS = 15000;
+
+// ---------------------------------------------------------------------------
+// POST /api/ideas  — el agente propone ideas de planes
+// body: { fecha, ubicacion, personaId?, cantidad?, tipoPreferido? }
+// ---------------------------------------------------------------------------
+app.post('/api/ideas', auth.requiereSesion, async (req, res) => {
+  const { fecha, ubicacion, personaId, cantidad, tipoPreferido } = req.body || {};
+
   if (!fecha || typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
     return res.status(400).json({ error: 'parametro_invalido', mensaje: 'Debes indicar una fecha válida.' });
   }
   const erroresUbicacion = validarUbicacion(ubicacion, 'una ubicación');
   if (erroresUbicacion.length > 0) {
     return res.status(400).json({ error: 'parametro_invalido', mensaje: erroresUbicacion.join(' ') });
+  }
+  const cantidadFinal = cantidad === undefined ? 3 : Number(cantidad);
+  if (!Number.isInteger(cantidadFinal) || cantidadFinal < 1 || cantidadFinal > 3) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'La cantidad de ideas debe ser de 1 a 3.' });
+  }
+  if (tipoPreferido && !obtenerTipoPorId(tipoPreferido)) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'El tipo de plan preferido no es válido.' });
   }
 
   try {
@@ -809,35 +897,23 @@ app.post('/api/sugerir-plan', auth.requiereSesion, async (req, res) => {
       }
     }
 
-    // El clima es un "nice to have" para la sugerencia: si falla, seguimos
-    // sin el, en vez de bloquear toda la sugerencia por eso.
-    let climaTexto = null;
-    try {
-      const resultadoClima = await obtenerClimaParaFecha(Number(ubicacion.lat), Number(ubicacion.lon), fecha);
-      climaTexto = climaATextoDescriptivo(resultadoClima);
-    } catch (errClima) {
-      climaTexto = null;
-    }
-
-    const resultado = await ia.sugerirPlan({
+    const ideas = await ia.sugerirIdeas({
       actor: actorDePeticion(req),
-      etiquetaTipo: tipoInfo.etiqueta,
+      fecha,
+      ubicacion: { nombre: ubicacion.nombre.trim(), lat: Number(ubicacion.lat), lon: Number(ubicacion.lon) },
       persona,
-      climaTexto,
-      lugarNombre: ubicacion.nombre
+      cantidad: cantidadFinal,
+      tipoPreferido: tipoPreferido || null,
+      herramientas: herramientasDelAgente
     });
-
-    res.json(resultado);
+    res.json({ ideas });
   } catch (err) {
     if (err instanceof ia.ErrorServicioIA) {
       // 503: la IA no esta disponible, pero el resto de la app sigue
-      // funcionando y la cita se puede llenar a mano.
-      return res.status(503).json({
-        error: 'error_servicio_externo',
-        mensaje: `No se pudo generar una sugerencia con IA (${err.message}).`
-      });
+      // funcionando y la cita se puede planear a mano.
+      return res.status(503).json({ error: 'error_servicio_externo', mensaje: `No se pudieron generar ideas (${err.message}).` });
     }
-    manejarError(err, res, 'sugerencia de IA', req);
+    manejarError(err, res, 'ideas de IA', req);
   }
 });
 

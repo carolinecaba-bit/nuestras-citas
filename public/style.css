@@ -282,6 +282,83 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 }
 .inicio-principal, .inicio-lateral { display: grid; gap: 18px; }
 
+/* --- Hoy: clima del dia y planes del agente --- */
+
+.hoy {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 22px 24px;
+  margin-bottom: 18px;
+}
+.hoy-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.hoy-fecha { margin: 0 0 4px; font-size: 14px; color: var(--texto-suave); }
+.hoy-texto h2 { font-size: clamp(20px, 3vw, 26px); line-height: 1.25; max-width: 32ch; }
+.hoy-clima {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radio-chico);
+  background: var(--fondo);
+  color: var(--texto-suave);
+  flex: none;
+}
+.hoy-clima:empty { display: none; }
+.hoy-clima svg { width: 30px; height: 30px; }
+.hoy-clima.clima-buena { background: var(--bien-fondo); color: var(--bien); }
+.hoy-clima.clima-precaucion { background: var(--precaucion-fondo); color: var(--precaucion); }
+.hoy-clima.clima-alerta { background: var(--alerta-fondo); color: var(--alerta); }
+.hoy-temp { font-family: 'Fraunces', serif; font-size: 32px; font-weight: 600; line-height: 1; }
+.hoy-detalle { font-size: 13px; line-height: 1.35; }
+.hoy-pie { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+
+.cargando-agente {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radio-chico);
+  background: var(--dorado-tenue);
+  color: var(--precaucion);
+  font-size: 14px;
+}
+
+.lista-ideas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.lista-ideas:empty { display: none; }
+.idea {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--borde);
+  border-top: 3px solid var(--dorado);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+}
+.idea-cabecera { display: flex; align-items: center; gap: 8px; }
+.idea-etiqueta { font-size: 13px; color: var(--texto-suave); }
+.idea h3 { font-size: 17px; line-height: 1.25; }
+.idea p { margin: 0; font-size: 14px; color: var(--texto-suave); }
+.idea .idea-lugar { color: var(--texto); }
+.idea-lugar a { color: var(--acento); text-decoration: none; }
+.idea-lugar a:hover { text-decoration: underline; }
+.idea .btn { align-self: flex-start; margin-top: 6px; }
+
+.ideas-asistente {
+  padding: 16px;
+  border-radius: var(--radio);
+  background: var(--dorado-tenue);
+  margin-bottom: 4px;
+}
+.ideas-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ideas-titulo { margin: 0; font-weight: 700; }
+.ideas-cabecera .texto-suave { margin: 2px 0 0; font-size: 14px; }
+.ideas-asistente .lista-ideas { grid-template-columns: 1fr; }
+
 /* --- La postal: la proxima cita --- */
 
 .postal {
@@ -935,6 +1012,9 @@ textarea { resize: vertical; }
 
 @media (max-width: 600px) {
   .dashboard { padding-top: 20px; }
+  .hoy { padding: 18px; }
+  .hoy-cabecera { flex-direction: column; gap: 12px; }
+  .hoy-pie .btn { width: 100%; }
   .saludo { flex-wrap: wrap; }
   .cuenta .btn-cerrar-sesion { padding: 6px 10px; }
   .postal { grid-template-columns: 1fr; gap: 16px; padding: 20px; }

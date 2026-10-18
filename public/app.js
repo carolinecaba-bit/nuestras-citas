@@ -333,6 +333,7 @@ function renderizarTodo() {
 // Inicio
 // -----------------------------------------------------------------------
 function renderizarInicio() {
+  renderizarHoy();
   renderizarProximaCita();
   renderizarFechasRecurrentes();
   renderizarHaceTiempo();
@@ -379,6 +380,106 @@ function renderizarProximaCita() {
     </article>`;
   cargarClimaDeCita(cita.id, el.querySelector('.postal'));
 }
+
+// --- Bloque "Hoy": clima, frase y planes del agente ---
+let lugarHoy = null;
+let ideasHoy = [];
+let climaHoyCargadoPara = null;
+
+/** Lugares para el clima de hoy: tus favoritos y recientes, o Santo Domingo. */
+function opcionesLugarHoy() {
+  const propios = lugaresGuardados.slice(0, 4).map((l) => ({ nombre: l.nombre, etiqueta: l.alias || l.nombre, lat: l.lat, lon: l.lon }));
+  return propios.length ? propios : [{ nombre: 'Santo Domingo', etiqueta: 'Santo Domingo', lat: 18.4861, lon: -69.9312 }];
+}
+
+// Un paseo emblematico por ciudad, para que la frase del dia suene local.
+const PASEOS_POR_CIUDAD = [
+  ['santo domingo', 'el Jardín Botánico'],
+  ['santiago', 'el Monumento'],
+  ['puerto plata', 'el Malecón de Puerto Plata'],
+  ['jarabacoa', 'el Salto de Baiguate'],
+  ['romana', 'Altos de Chavón'],
+  ['terrenas', 'la playa'],
+  ['punta cana', 'la playa']
+];
+
+function fraseDelDia(datos, categoria, lugar) {
+  // Nombre completo (no el alias corto del chip, como "STI").
+  const nombre = lugar.nombre;
+  const paseo = (PASEOS_POR_CIUDAD.find(([clave]) => lugar.nombre.toLowerCase().includes(clave)) || [])[1];
+  if (categoria === 'alerta') return `Se esperan tormentas en ${nombre}: hoy pinta para cine o una cena bajo techo.`;
+  if (categoria === 'precaucion') return `Puede llover en ${nombre}: buen día para un café o una película.`;
+  if (datos.temperaturaMax >= 32) return `Calor fuerte en ${nombre}: playa temprano o un atardecer frente al mar.`;
+  if (datos.temperaturaMax >= 26) return paseo ? `Hoy es un buen día para caminar por ${paseo} o hacer un picnic.` : `Buen día en ${nombre} para un picnic o una caminata.`;
+  return `Día fresco en ${nombre}: ideal para caminar, subir a un mirador o un café.`;
+}
+
+function renderizarHoy() {
+  const opciones = opcionesLugarHoy();
+  if (!lugarHoy || !opciones.some((o) => mismaUbicacion(o, lugarHoy))) lugarHoy = opciones[0];
+  $('hoy-fecha').textContent = capitalizar(formatearFechaLarga(hoyISO()));
+  $('hoy-lugares').innerHTML = opciones.length > 1
+    ? opciones.map((o, i) => `<button type="button" class="chip ${mismaUbicacion(o, lugarHoy) ? 'activo' : ''}" data-lugar-hoy="${i}" aria-pressed="${mismaUbicacion(o, lugarHoy)}">${escaparHtml(o.etiqueta)}</button>`).join('')
+    : `<span class="texto-suave">📍 ${escaparHtml(lugarHoy.etiqueta)}</span>`;
+  const clave = `${hoyISO()}|${lugarHoy.lat},${lugarHoy.lon}`;
+  if (climaHoyCargadoPara !== clave) cargarClimaHoy(clave);
+}
+
+async function cargarClimaHoy(clave) {
+  climaHoyCargadoPara = clave;
+  const lugar = lugarHoy;
+  $('hoy-frase').textContent = `Revisando el clima en ${lugar.etiqueta}…`;
+  $('hoy-clima').innerHTML = '';
+  try {
+    const resultado = await llamarApi(`/api/clima?lat=${lugar.lat}&lon=${lugar.lon}&fecha=${hoyISO()}`);
+    if (lugar !== lugarHoy || resultado.estado === 'no_disponible') return;
+    const { datos } = resultado;
+    const categoria = categoriaClima(datos.codigoClima);
+    $('hoy-frase').textContent = fraseDelDia(datos, categoria, lugar);
+    $('hoy-clima').className = `hoy-clima clima-${categoria}`;
+    $('hoy-clima').innerHTML = `
+      ${ICONOS_CLIMA[categoria]}
+      <span class="hoy-temp">${Math.round(datos.temperaturaMax)}°</span>
+      <span class="hoy-detalle">${describirClima(datos.codigoClima)}<br>mín ${Math.round(datos.temperaturaMin)}°${datos.precipitacion > 0 ? `, ${datos.precipitacion} mm` : ''}</span>`;
+  } catch (err) {
+    climaHoyCargadoPara = null;
+    $('hoy-frase').textContent = `No pude revisar el clima en ${lugar.etiqueta}, pero igual puedes pedir ideas.`;
+  }
+}
+
+$('hoy-lugares').addEventListener('click', (evento) => {
+  const chip = evento.target.closest('[data-lugar-hoy]');
+  if (!chip) return;
+  lugarHoy = opcionesLugarHoy()[Number(chip.dataset.lugarHoy)];
+  ideasHoy = [];
+  $('ideas-hoy-lista').innerHTML = '';
+  renderizarHoy();
+});
+
+$('btn-ideas-hoy').addEventListener('click', async () => {
+  const ideas = await pedirIdeas(
+    { fecha: hoyISO(), ubicacion: { nombre: lugarHoy.nombre, lat: lugarHoy.lat, lon: lugarHoy.lon } },
+    { boton: $('btn-ideas-hoy'), cargando: $('ideas-hoy-cargando'), mensaje: $('ideas-hoy-mensaje'), lista: $('ideas-hoy-lista') }
+  );
+  if (!ideas) return;
+  ideasHoy = ideas;
+  $('ideas-hoy-lista').innerHTML = ideas.map((idea, i) => tarjetaIdea(idea, i, 'Planear esto')).join('');
+});
+
+$('ideas-hoy-lista').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-idea]');
+  if (!boton) return;
+  const idea = ideasHoy[Number(boton.dataset.idea)];
+  // Ya estan cuando, donde y que: el asistente arranca en "Con quien".
+  abrirAsistente({
+    tipo: idea.tipo,
+    fecha: hoyISO(),
+    hora: HORA_POR_MOMENTO[idea.momento] || null,
+    ubicacion: { nombre: lugarHoy.nombre, lat: lugarHoy.lat, lon: lugarHoy.lon },
+    lugarElegido: idea.lugar,
+    titulo: idea.titulo
+  }, 3);
+});
 
 /** Cumpleaños y fechas importantes de los proximos 30 dias. */
 function fechasRecurrentesProximas() {
@@ -920,13 +1021,29 @@ $('form-persona').addEventListener('submit', async (evento) => {
 // -----------------------------------------------------------------------
 // Asistente de nueva cita (paso a paso)
 // -----------------------------------------------------------------------
+// Orden pensado para la IA: para sugerir que hacer, el agente necesita
+// saber cuando, donde y con quien.
 const PASOS = [
-  { nombre: 'Qué', valido: () => Boolean(borrador.tipo), pista: 'Elige un tipo de plan para seguir' },
   { nombre: 'Cuándo', valido: () => Boolean(borrador.fecha), pista: 'Elige una fecha para seguir' },
-  { nombre: 'Con quién', valido: () => true, pista: '' },
   { nombre: 'Dónde', valido: () => Boolean(borrador.ubicacion), pista: 'Elige un lugar para seguir' },
+  { nombre: 'Con quién', valido: () => true, pista: '' },
+  { nombre: 'Qué', valido: () => Boolean(borrador.tipo), pista: 'Elige un tipo de plan o una idea' },
   { nombre: 'Detalles', valido: () => true, pista: '' }
 ];
+
+// Ciudades populares de RD, para elegir el lugar con un toque.
+const CIUDADES_RD = [
+  { nombre: 'Santo Domingo', lat: 18.4861, lon: -69.9312 },
+  { nombre: 'Santiago de los Caballeros', alias: 'Santiago', lat: 19.4517, lon: -70.697 },
+  { nombre: 'Punta Cana', lat: 18.5601, lon: -68.3725 },
+  { nombre: 'Puerto Plata', lat: 19.7934, lon: -70.6884 },
+  { nombre: 'La Romana', lat: 18.4273, lon: -68.9728 },
+  { nombre: 'Las Terrenas', lat: 19.311, lon: -69.5428 },
+  { nombre: 'Jarabacoa', lat: 19.1167, lon: -70.6333 }
+];
+
+// Hora sugerida segun el momento que propone el agente.
+const HORA_POR_MOMENTO = { manana: '10:00', tarde: '16:00', noche: '19:30' };
 
 const FRANJAS = [
   { id: 'manana', etiqueta: 'Mañana', desde: 6 * 60, hasta: 11 * 60 + 30 },
@@ -939,33 +1056,40 @@ let pasoActual = 1;
 let mesCalendario = null; // Date del primer dia del mes visible
 let franjaActiva = null;
 let lugaresSugeridos = [];
-let claveSugerenciaIA = null;
+let claveIdeasAsistente = null;
 
 function borradorVacio() {
   return { tipo: null, fecha: null, hora: null, personaId: null, ubicacion: null, lugarElegido: null };
 }
 
-function abrirAsistente(prefill = {}) {
-  borrador = { ...borradorVacio(), ...prefill };
+/**
+ * Abre el asistente. `prefill` puede traer tipo, fecha, hora, personaId,
+ * ubicacion, lugarElegido y titulo (por ejemplo, desde una idea de "Hoy").
+ * `pasoInicial` permite saltar los pasos que ya estan resueltos.
+ */
+function abrirAsistente(prefill = {}, pasoInicial = 1) {
+  const { titulo = '', ...resto } = prefill;
+  borrador = { ...borradorVacio(), ...resto };
   if (borrador.personaId && !buscarPersonaPorId(borrador.personaId)) borrador.personaId = null;
   pasoActual = 1;
   const base = borrador.fecha ? deISO(borrador.fecha) : hoy();
   mesCalendario = new Date(base.getFullYear(), base.getMonth(), 1);
   franjaActiva = null;
-  lugaresSugeridos = [];
-  claveSugerenciaIA = null;
-  $('cita-titulo').value = '';
+  lugaresSugeridos = borrador.lugarElegido ? [borrador.lugarElegido] : [];
+  claveIdeasAsistente = null;
+  $('cita-titulo').value = titulo;
+  $('ideas-asistente-lista').innerHTML = '';
+  ocultarMensaje($('ideas-asistente-mensaje'));
   $('buscar-lugar').value = '';
   $('lista-resultados-ubicacion').innerHTML = '';
   $('modo-coordenadas').classList.add('oculto');
   $('lista-lugares').innerHTML = '';
-  ocultarSugerenciaIA();
   ['mensaje-form', 'mensaje-donde', 'lugares-mensaje'].forEach((id) => ocultarMensaje($(id)));
 
   elementoConFocoPrevioAsistente = document.activeElement;
   $('asistente').classList.remove('oculto');
   document.body.classList.add('sin-scroll');
-  irAPaso(1);
+  irAPaso(pasoInicial);
 }
 
 let elementoConFocoPrevioAsistente = null;
@@ -986,10 +1110,10 @@ function irAPaso(numero) {
   $('btn-siguiente').disabled = false;
   $('btn-siguiente').classList.replace('btn-secundario', 'btn-principal');
 
-  if (numero === 1) renderizarPasoQue();
-  if (numero === 2) renderizarPasoCuando();
+  if (numero === 1) renderizarPasoCuando();
+  if (numero === 2) renderizarPasoDonde();
   if (numero === 3) renderizarPasoConQuien();
-  if (numero === 4) renderizarPasoDonde();
+  if (numero === 4) renderizarPasoQue();
   if (numero === 5) renderizarPasoDetalles();
   actualizarPie();
   document.querySelector('.asistente-cuerpo').scrollTop = 0;
@@ -1010,8 +1134,20 @@ $('btn-siguiente').addEventListener('click', () => {
   else guardarCita();
 });
 
-// --- Paso 1: Que ---
+// --- Paso 4: Que (con ideas del agente) ---
+function contextoDelBorrador() {
+  const persona = borrador.personaId ? buscarPersonaPorId(borrador.personaId) : null;
+  return `${capitalizar(formatearFechaLarga(borrador.fecha))} en ${borrador.ubicacion.nombre}${persona ? `, con ${persona.nombre}` : ''}. El agente revisa el clima y busca lugares reales.`;
+}
+
 function renderizarPasoQue() {
+  $('ideas-asistente-contexto').textContent = contextoDelBorrador();
+  // Si cambio la fecha, el lugar o la persona, las ideas anteriores ya no aplican.
+  const clave = JSON.stringify([borrador.fecha, borrador.ubicacion, borrador.personaId]);
+  if (claveIdeasAsistente && clave !== claveIdeasAsistente) {
+    $('ideas-asistente-lista').innerHTML = '';
+    claveIdeasAsistente = null;
+  }
   $('opciones-tipo').innerHTML = tiposCita.map((t) => `
     <button type="button" role="radio" class="opcion-tipo ${borrador.tipo === t.id ? 'activo' : ''}" aria-checked="${borrador.tipo === t.id}" data-tipo="${t.id}">
       <span class="opcion-icono">${ICONOS_TIPO[t.id] || ICONOS_TIPO.otro}</span>
@@ -1201,6 +1337,12 @@ function mismaUbicacion(a, b) {
 }
 
 function renderizarPasoDonde() {
+  const populares = CIUDADES_RD.filter((c) => !lugaresGuardados.some((l) => mismaUbicacion(l, c)));
+  $('bloque-populares').classList.toggle('oculto', populares.length === 0);
+  $('lugares-populares').innerHTML = populares.map((c) => {
+    const activo = mismaUbicacion(c, borrador.ubicacion);
+    return `<button type="button" class="chip ${activo ? 'activo' : ''}" data-ciudad="${escaparHtml(c.nombre)}" aria-pressed="${activo}">${escaparHtml(c.alias || c.nombre)}</button>`;
+  }).join('');
   $('bloque-guardados').classList.toggle('oculto', lugaresGuardados.length === 0);
   $('lugares-guardados').innerHTML = lugaresGuardados.map((l) => {
     const activo = mismaUbicacion(l, borrador.ubicacion);
@@ -1244,6 +1386,13 @@ function fijarUbicacion(ubicacion) {
   renderizarPasoDonde();
   actualizarPie();
 }
+
+$('lugares-populares').addEventListener('click', (evento) => {
+  const chip = evento.target.closest('[data-ciudad]');
+  if (!chip) return;
+  const ciudad = CIUDADES_RD.find((c) => c.nombre === chip.dataset.ciudad);
+  if (ciudad) fijarUbicacion({ nombre: ciudad.nombre, lat: ciudad.lat, lon: ciudad.lon });
+});
 
 $('lugares-guardados').addEventListener('click', async (evento) => {
   const quitar = evento.target.closest('[data-quitar-lugar]');
@@ -1351,44 +1500,71 @@ function renderizarPasoDetalles() {
     </p>`;
   $('titulo-sugerencias').innerHTML = `Lugares para tu plan en ${escaparHtml(borrador.ubicacion.nombre)} <span class="texto-suave">(opcional)</span>`;
 
-  // Si cambio algo que usa la IA, la sugerencia anterior ya no aplica.
-  const clave = JSON.stringify([borrador.tipo, borrador.fecha, borrador.personaId, borrador.ubicacion]);
-  if (clave !== claveSugerenciaIA) ocultarSugerenciaIA();
   renderizarLugares();
 }
 
-function ocultarSugerenciaIA() {
-  $('ia-sugerencia').classList.add('oculto');
-  ocultarMensaje($('ia-mensaje'));
+// -----------------------------------------------------------------------
+// Ideas del agente (bloque "Hoy" y paso "Que" del asistente)
+// -----------------------------------------------------------------------
+const MOMENTOS = { manana: 'Mañana', tarde: 'Tarde', noche: 'Noche' };
+
+function tarjetaIdea(idea, indice, textoBoton) {
+  const lugar = idea.lugar
+    ? `<p class="idea-lugar">📍 ${idea.lugar.enlaceMapa ? `<a href="${idea.lugar.enlaceMapa}" target="_blank" rel="noopener">${escaparHtml(idea.lugar.nombre)}</a>` : escaparHtml(idea.lugar.nombre)}</p>`
+    : '';
+  return `
+    <article class="idea">
+      <div class="idea-cabecera">
+        <span class="icono-tipo">${ICONOS_TIPO[idea.tipo] || ICONOS_TIPO.otro}</span>
+        <span class="idea-etiqueta">${escaparHtml(etiquetaTipo(idea.tipo))}, ${MOMENTOS[idea.momento] ? MOMENTOS[idea.momento].toLowerCase() : ''}</span>
+      </div>
+      <h3>${escaparHtml(idea.titulo)}</h3>
+      <p>${escaparHtml(idea.descripcion)}</p>
+      ${lugar}
+      <button type="button" class="btn btn-terciario" data-idea="${indice}">${textoBoton}</button>
+    </article>`;
 }
 
-$('btn-sugerir-ia').addEventListener('click', async () => {
-  ocultarSugerenciaIA();
-  const boton = $('btn-sugerir-ia');
-  $('ia-cargando').classList.remove('oculto');
+async function pedirIdeas({ fecha, ubicacion, personaId = null }, elementos) {
+  const { boton, cargando, mensaje, lista } = elementos;
+  ocultarMensaje(mensaje);
+  lista.innerHTML = '';
+  cargando.classList.remove('oculto');
   boton.disabled = true;
   try {
-    const data = await enviarJson('/api/sugerir-plan', 'POST', {
-      tipo: borrador.tipo,
-      personaId: borrador.personaId,
-      fecha: borrador.fecha,
-      ubicacion: borrador.ubicacion
-    });
-    claveSugerenciaIA = JSON.stringify([borrador.tipo, borrador.fecha, borrador.personaId, borrador.ubicacion]);
-    $('ia-sugerencia-titulo').textContent = data.titulo;
-    $('ia-sugerencia-descripcion').textContent = data.descripcion;
-    $('ia-sugerencia').classList.remove('oculto');
+    const data = await enviarJson('/api/ideas', 'POST', { fecha, ubicacion, personaId, cantidad: 3 });
+    return data.ideas;
   } catch (err) {
-    mostrarMensaje($('ia-mensaje'), err.message);
+    mostrarMensaje(mensaje, err.message);
+    return null;
   } finally {
-    $('ia-cargando').classList.add('oculto');
+    cargando.classList.add('oculto');
     boton.disabled = false;
   }
+}
+
+let ideasAsistente = [];
+$('btn-ideas-asistente').addEventListener('click', async () => {
+  const ideas = await pedirIdeas(
+    { fecha: borrador.fecha, ubicacion: borrador.ubicacion, personaId: borrador.personaId },
+    { boton: $('btn-ideas-asistente'), cargando: $('ideas-asistente-cargando'), mensaje: $('ideas-asistente-mensaje'), lista: $('ideas-asistente-lista') }
+  );
+  if (!ideas) return;
+  ideasAsistente = ideas;
+  claveIdeasAsistente = JSON.stringify([borrador.fecha, borrador.ubicacion, borrador.personaId]);
+  $('ideas-asistente-lista').innerHTML = ideas.map((idea, i) => tarjetaIdea(idea, i, 'Elegir esta idea')).join('');
 });
 
-$('btn-usar-sugerencia').addEventListener('click', () => {
-  $('cita-titulo').value = $('ia-sugerencia-titulo').textContent;
-  $('ia-sugerencia').classList.add('oculto');
+$('ideas-asistente-lista').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-idea]');
+  if (!boton) return;
+  const idea = ideasAsistente[Number(boton.dataset.idea)];
+  borrador.tipo = idea.tipo;
+  borrador.lugarElegido = idea.lugar;
+  lugaresSugeridos = idea.lugar ? [idea.lugar] : [];
+  if (!borrador.hora) borrador.hora = HORA_POR_MOMENTO[idea.momento] || null;
+  $('cita-titulo').value = idea.titulo;
+  irAPaso(5);
 });
 
 $('btn-ver-sugerencias').addEventListener('click', async () => {
@@ -1418,7 +1594,7 @@ function renderizarLugares() {
     return `
       <div class="lugar-card ${esElegido ? 'elegido' : ''}">
         <h4>${escaparHtml(lugar.nombre)}</h4>
-        <div class="distancia">${lugar.distanciaKm} km de distancia</div>
+        ${lugar.distanciaKm != null ? `<div class="distancia">${lugar.distanciaKm} km de distancia</div>` : '<div class="distancia">Sugerido por el agente</div>'}
         <div class="acciones">
           <button type="button" class="elegir" data-lugar="${i}" aria-pressed="${Boolean(esElegido)}">${esElegido ? 'Elegido' : 'Elegir'}</button>
           <a class="enlace-mapa" href="${lugar.enlaceMapa}" target="_blank" rel="noopener">Ver mapa</a>

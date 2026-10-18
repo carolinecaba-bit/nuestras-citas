@@ -108,6 +108,23 @@
 
     <!-- Inicio -->
     <section id="panel-inicio" class="panel" role="tabpanel">
+      <section class="hoy" aria-labelledby="hoy-frase">
+        <div class="hoy-cabecera">
+          <div class="hoy-texto">
+            <p class="hoy-fecha" id="hoy-fecha"></p>
+            <h2 id="hoy-frase">Revisando el clima de hoy…</h2>
+          </div>
+          <div class="hoy-clima" id="hoy-clima" aria-live="polite"></div>
+        </div>
+        <div class="hoy-pie">
+          <div id="hoy-lugares" class="chips" role="group" aria-label="Lugar para el clima de hoy"></div>
+          <button type="button" class="btn btn-principal" id="btn-ideas-hoy">✨ Sugiéreme planes para hoy</button>
+        </div>
+        <div id="ideas-hoy-cargando" class="cargando-agente oculto">El agente está revisando el clima, sus guías y lugares reales… puede tardar hasta un minuto.</div>
+        <div id="ideas-hoy-mensaje" class="mensaje oculto" role="alert"></div>
+        <div id="ideas-hoy-lista" class="lista-ideas"></div>
+      </section>
+
       <div class="inicio-rejilla">
         <div class="inicio-principal">
           <div id="proxima-cita"></div>
@@ -185,14 +202,8 @@
       <div class="asistente-progreso" aria-hidden="true"><span id="asistente-barra"></span></div>
 
       <div class="asistente-cuerpo">
-        <!-- Paso 1: Que -->
+        <!-- Paso 1: Cuando -->
         <section class="paso" data-paso="1">
-          <p class="paso-pregunta">¿Qué plan tienes en mente?</p>
-          <div id="opciones-tipo" class="opciones-tipo" role="radiogroup" aria-label="Tipo de plan"></div>
-        </section>
-
-        <!-- Paso 2: Cuando -->
-        <section class="paso" data-paso="2">
           <p class="paso-pregunta">¿Cuándo?</p>
           <div id="atajos-fecha" class="chips"></div>
           <div id="calendario" class="calendario"></div>
@@ -201,18 +212,16 @@
           <div id="horas" class="horas"></div>
         </section>
 
-        <!-- Paso 3: Con quien -->
-        <section class="paso" data-paso="3">
-          <p class="paso-pregunta">¿Con quién?</p>
-          <div id="opciones-persona" class="opciones-persona" role="radiogroup" aria-label="Con quién"></div>
-        </section>
-
-        <!-- Paso 4: Donde -->
-        <section class="paso" data-paso="4">
+        <!-- Paso 2: Donde -->
+        <section class="paso" data-paso="2">
           <p class="paso-pregunta">¿Dónde?</p>
           <div id="bloque-guardados">
             <p class="campo-etiqueta">Tus lugares</p>
             <div id="lugares-guardados" class="chips"></div>
+          </div>
+          <div id="bloque-populares">
+            <p class="campo-etiqueta">Populares en República Dominicana</p>
+            <div id="lugares-populares" class="chips"></div>
           </div>
           <p class="campo-etiqueta">Buscar otro lugar</p>
           <div class="fila">
@@ -233,22 +242,37 @@
           <div id="mensaje-donde" class="mensaje oculto" role="alert"></div>
         </section>
 
+        <!-- Paso 3: Con quien -->
+        <section class="paso" data-paso="3">
+          <p class="paso-pregunta">¿Con quién?</p>
+          <div id="opciones-persona" class="opciones-persona" role="radiogroup" aria-label="Con quién"></div>
+        </section>
+
+        <!-- Paso 4: Que (con ideas del agente) -->
+        <section class="paso" data-paso="4">
+          <p class="paso-pregunta">¿Qué plan tienen en mente?</p>
+          <div class="ideas-asistente">
+            <div class="ideas-cabecera">
+              <div>
+                <p class="ideas-titulo">¿No se te ocurre nada?</p>
+                <p class="texto-suave" id="ideas-asistente-contexto"></p>
+              </div>
+              <button type="button" class="btn btn-secundario" id="btn-ideas-asistente">✨ Sugiéreme ideas</button>
+            </div>
+            <div id="ideas-asistente-cargando" class="cargando-agente oculto">El agente está revisando el clima, sus guías y lugares reales… puede tardar hasta un minuto.</div>
+            <div id="ideas-asistente-mensaje" class="mensaje oculto" role="alert"></div>
+            <div id="ideas-asistente-lista" class="lista-ideas"></div>
+          </div>
+          <p class="campo-etiqueta">O elige el tipo de plan</p>
+          <div id="opciones-tipo" class="opciones-tipo" role="radiogroup" aria-label="Tipo de plan"></div>
+        </section>
+
         <!-- Paso 5: Detalles -->
         <section class="paso" data-paso="5">
-          <p class="paso-pregunta">Ponle nombre a tu plan</p>
+          <p class="paso-pregunta">Últimos detalles</p>
           <div id="resumen-cita" class="resumen-cita"></div>
           <label class="campo-etiqueta" for="cita-titulo">Título <span class="texto-suave">(si lo dejas vacío, se crea uno solo)</span></label>
-          <div class="fila">
-            <input type="text" id="cita-titulo" placeholder="Ej: Picnic con Ana" autocomplete="off" />
-            <button type="button" id="btn-sugerir-ia" class="btn btn-secundario">✨ Sugerir con IA</button>
-          </div>
-          <div id="ia-cargando" class="cargando oculto">Pensando una idea...</div>
-          <div id="ia-mensaje" class="mensaje oculto"></div>
-          <div id="ia-sugerencia" class="ia-sugerencia oculto">
-            <h4 id="ia-sugerencia-titulo"></h4>
-            <p id="ia-sugerencia-descripcion"></p>
-            <button type="button" id="btn-usar-sugerencia" class="btn btn-terciario">Usar este título</button>
-          </div>
+          <input type="text" id="cita-titulo" placeholder="Ej: Picnic con Ana" autocomplete="off" />
 
           <div class="seccion-sugerencias">
             <div class="sugerencias-encabezado">
