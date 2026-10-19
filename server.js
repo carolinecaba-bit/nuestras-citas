@@ -196,7 +196,52 @@ function diferenciaEnDias(fechaISO) {
   return Math.round((fechaUTC - hoyUTC) / 86400000);
 }
 
+// ---------------------------------------------------------------------------
+// Cache del clima. En Render (plan gratuito) la IP de salida se comparte con
+// muchas otras apps, y Open-Meteo limita las peticiones por IP: sin cache,
+// es facil recibir 429 ("demasiadas peticiones"). El pronostico se guarda
+// 1 hora y el clima pasado 24 horas; dos peticiones iguales al mismo tiempo
+// comparten una sola llamada; y si Open-Meteo esta saturado, se usa el
+// ultimo dato guardado aunque este vencido.
+// ---------------------------------------------------------------------------
+const cacheClima = new Map(); // clave -> { en, datos, ttl }
+const climaEnCurso = new Map(); // clave -> Promise
+const MAX_ENTRADAS_CACHE_CLIMA = 2000;
+
+function esperar(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
 async function pedirResumenDiario(baseUrl, lat, lon, fechaISO) {
+  const clave = `${baseUrl}|${Number(lat).toFixed(2)}|${Number(lon).toFixed(2)}|${fechaISO}`;
+  const ttl = baseUrl === ARCHIVE_BASE_URL ? 24 * 3600000 : 3600000;
+  const guardado = cacheClima.get(clave);
+  if (guardado && Date.now() - guardado.en < guardado.ttl) return guardado.datos;
+  if (climaEnCurso.has(clave)) return climaEnCurso.get(clave);
+
+  const tarea = (async () => {
+    try {
+      let datos;
+      try {
+        datos = await pedirResumenDiarioSinCache(baseUrl, lat, lon, fechaISO);
+      } catch (err) {
+        if (!err.esLimite) throw err;
+        await esperar(1200 + Math.random() * 800); // un reintento si fue 429
+        datos = await pedirResumenDiarioSinCache(baseUrl, lat, lon, fechaISO);
+      }
+      if (cacheClima.size >= MAX_ENTRADAS_CACHE_CLIMA) cacheClima.delete(cacheClima.keys().next().value);
+      cacheClima.set(clave, { en: Date.now(), datos, ttl });
+      return datos;
+    } catch (err) {
+      if (guardado) return guardado.datos; // mejor un dato algo viejo que un error
+      throw err;
+    } finally {
+      climaEnCurso.delete(clave);
+    }
+  })();
+  climaEnCurso.set(clave, tarea);
+  return tarea;
+}
+
+async function pedirResumenDiarioSinCache(baseUrl, lat, lon, fechaISO) {
   const url = conApiKey(new URL(baseUrl));
   url.searchParams.set('latitude', String(lat));
   url.searchParams.set('longitude', String(lon));
@@ -206,6 +251,11 @@ async function pedirResumenDiario(baseUrl, lat, lon, fechaISO) {
   url.searchParams.set('timezone', 'auto');
 
   const respuesta = await fetchConTimeout(url.toString());
+  if (respuesta.status === 429) {
+    const err = new ErrorServicioExterno('el servicio de clima está saturado en este momento, intenta en unos minutos');
+    err.esLimite = true;
+    throw err;
+  }
   if (!respuesta.ok) {
     throw new ErrorServicioExterno(`estado ${respuesta.status}`);
   }
