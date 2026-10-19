@@ -311,6 +311,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .hoy-clima.clima-alerta { background: var(--alerta-fondo); color: var(--alerta); }
 .hoy-temp { font-family: 'Fraunces', serif; font-size: 32px; font-weight: 600; line-height: 1; }
 .hoy-detalle { font-size: 13px; line-height: 1.35; }
+.fuente-clima { display: block; margin-top: 3px; font-size: 11px; opacity: 0.75; }
 .hoy-pie { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
 
 .cargando-agente {

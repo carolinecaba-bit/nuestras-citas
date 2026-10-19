@@ -483,7 +483,7 @@ async function cargarClimaHoy(clave) {
     $('hoy-clima').innerHTML = `
       ${ICONOS_CLIMA[categoria]}
       <span class="hoy-temp">${Math.round(datos.temperaturaMax)}°</span>
-      <span class="hoy-detalle">${describirClima(datos.codigoClima)}<br>mín ${Math.round(datos.temperaturaMin)}°${datos.precipitacion > 0 ? `, ${datos.precipitacion} mm` : ''}</span>`;
+      <span class="hoy-detalle">${describirClima(datos.codigoClima)}<br>mín ${Math.round(datos.temperaturaMin)}°${datos.precipitacion > 0 ? `, ${datos.precipitacion} mm` : ''}${datos.fuente ? `<span class="fuente-clima">Datos de ${escaparHtml(datos.fuente)}</span>` : ''}</span>`;
   } catch (err) {
     climaHoyCargadoPara = null;
     $('hoy-frase').textContent = `No pude revisar el clima en ${lugar.etiqueta}, pero igual puedes pedir ideas.`;
@@ -767,6 +767,7 @@ function renderizarClimaEnTarjeta(el, card, resultado) {
       <span class="etiqueta">${etiqueta}</span>
       ${describirClima(datos.codigoClima)}, máx ${Math.round(datos.temperaturaMax)}° / mín ${Math.round(datos.temperaturaMin)}°${precipitacion}
       ${consejo ? `<span class="consejo">${escaparHtml(consejo)}</span>` : ''}
+      ${datos.fuente ? `<span class="fuente-clima">Datos de ${escaparHtml(datos.fuente)}</span>` : ''}
     </span>
   `;
 }
@@ -1205,7 +1206,7 @@ $('btn-siguiente').addEventListener('click', () => {
 // --- Paso 4: Que (con ideas del agente) ---
 function contextoDelBorrador() {
   const persona = borrador.personaId ? buscarPersonaPorId(borrador.personaId) : null;
-  return `${capitalizar(formatearFechaLarga(borrador.fecha))} en ${borrador.ubicacion.nombre}${persona ? `, con ${persona.nombre}` : ''}. El agente revisa el clima y busca lugares reales.`;
+  return `${capitalizar(formatearFechaLarga(borrador.fecha))} en ${borrador.ubicacion.nombre}${persona ? `, con ${persona.nombre}` : ''}. Revisamos el clima y buscamos lugares reales para ustedes.`;
 }
 
 function renderizarPasoQue() {
@@ -1901,7 +1902,7 @@ function renderizarLugares() {
       <div class="lugar-card ${esElegido ? 'elegido' : ''}" data-indice-lugar="${i}">
         ${htmlFotoLugar(lugar, borrador.tipo)}
         <h4><span class="numero-lugar">${i + 1}</span> ${escaparHtml(lugar.nombre)}</h4>
-        ${lugar.distanciaKm != null ? `<div class="distancia">${lugar.distanciaKm} km de distancia</div>` : '<div class="distancia">Sugerido por el agente</div>'}
+        ${lugar.distanciaKm != null ? `<div class="distancia">${lugar.distanciaKm} km de distancia</div>` : '<div class="distancia">Sugerido para tu plan</div>'}
         <div class="acciones">
           <button type="button" class="elegir" data-lugar="${i}" aria-pressed="${Boolean(esElegido)}">${esElegido ? 'Elegido' : 'Elegir'}</button>
           <a class="enlace-mapa" href="${lugar.enlaceMapa}" target="_blank" rel="noopener">Abrir en OSM</a>

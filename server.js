@@ -15,6 +15,7 @@ const db = require('./db');
 const { TIPOS_CITA, obtenerTipoPorId } = require('./analizador');
 const { buscarLugares, ErrorServicioLugares, fotoDesdeTags, completarFotosDeWikidata } = require('./lugares');
 const nominatim = require('./nominatim');
+const climaMET = require('./clima-met');
 const usuarios = require('./usuarios');
 const personas = require('./personas');
 const lugaresGuardados = require('./lugaresGuardados');
@@ -286,8 +287,25 @@ async function obtenerClimaParaFecha(lat, lon, fechaISO) {
   }
 
   if (dias >= 0) {
-    const datos = await pedirResumenDiario(FORECAST_BASE_URL, lat, lon, fechaISO);
-    return { estado: 'pronostico', datos };
+    try {
+      const datos = await pedirResumenDiario(FORECAST_BASE_URL, lat, lon, fechaISO);
+      return { estado: 'pronostico', datos };
+    } catch (errOpenMeteo) {
+      // Respaldo: si Open-Meteo no responde (en Render es comun el 429),
+      // se pide el pronostico a MET Norway.
+      if (dias <= climaMET.DIAS_MAXIMOS) {
+        try {
+          const datos = await climaMET.resumenDiario(lat, lon, fechaISO);
+          if (datos) {
+            console.warn(`[clima] Open-Meteo falló (${errOpenMeteo.message}); se usó MET Norway`);
+            return { estado: 'pronostico', datos };
+          }
+        } catch (errMET) {
+          console.warn(`[clima] Open-Meteo y MET Norway fallaron: ${errOpenMeteo.message} | ${errMET.message}`);
+        }
+      }
+      throw errOpenMeteo;
+    }
   }
 
   try {

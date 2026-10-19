@@ -493,6 +493,14 @@ IA no está disponible.
 Requiere sesión. Floristerías, chocolaterías, reposterías y tiendas de
 regalos cercanas (OpenStreetMap, sin IA).
 
+### Clima y respaldo
+
+El clima viene de **Open-Meteo**, con caché de 1 hora y un reintento si
+responde 429. Si aun así falla (en Render pasa seguido, porque la IP de
+salida es compartida y Open-Meteo limita por IP), el pronóstico se pide a
+**MET Norway** (`clima-met.js`): gratuito, sin llave, hasta ~8 días. En ese
+caso la app muestra "Datos de MET Norway", como pide su licencia (CC BY 4.0).
+
 ### Búsqueda de lugares y respaldo
 
 - `GET /api/geocode` combina dos fuentes: **Nominatim** (buscador de

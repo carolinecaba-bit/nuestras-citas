@@ -147,12 +147,20 @@ function construirPrompt({ fecha, ubicacion, persona, cantidad, tipoPreferido })
   return lineas.join('\n');
 }
 
-function mensajeDeError(err) {
+// Cuando el proveedor falla varias veces, el AI SDK envuelve el error
+// original en un RetryError: el codigo de estado esta en lastError.
+function errorDeFondo(err) {
+  return err && err.lastError ? err.lastError : err;
+}
+
+function mensajeDeError(errOriginal) {
+  const err = errorDeFondo(errOriginal);
   const status = err.statusCode;
-  if (err.name === 'TimeoutError' || err.name === 'AbortError') return 'la IA tardó demasiado en responder';
+  if (err.name === 'TimeoutError' || err.name === 'AbortError' || errOriginal.name === 'TimeoutError') return 'la IA tardó demasiado en responder';
   if (status === 401 || status === 403) return 'la clave de la IA no es válida o no tiene acceso a este modelo';
   if (status === 404) return 'el modelo configurado en AI_MODEL no existe o fue retirado';
-  if (status === 429) return 'se alcanzó el límite de peticiones a la IA por ahora, intenta en un momento';
+  if (status === 429) return 'se alcanzó el límite de uso de la IA (el plan gratuito permite pocas peticiones por minuto y por día); intenta en un rato';
+  if (status === 503) return 'el proveedor de IA está sobrecargado en este momento, intenta de nuevo en unos minutos';
   if (status >= 500) return 'el proveedor de IA tuvo un error, intenta de nuevo';
   if (err.name === 'AI_NoSuchModelError' || err.name === 'AI_NoSuchProviderError') {
     return 'el proveedor o modelo de AI_MODEL no es válido (formato: proveedor:modelo)';
@@ -331,7 +339,7 @@ async function sugerirIdeas({ actor, fecha, ubicacion, persona = null, cantidad 
     const mensaje = mensajeDeError(err);
     logger.error({
       actor, funcion: 'sugerirIdeas',
-      output: { modelo: modelo(), error: err.message, tipoError: err.name, status: err.statusCode || null, herramientas: registroHerramientas, duracionMs: Date.now() - inicio },
+      output: { modelo: modelo(), error: errorDeFondo(err).message, tipoError: err.name, status: errorDeFondo(err).statusCode || null, status: err.statusCode || null, herramientas: registroHerramientas, duracionMs: Date.now() - inicio },
       mensaje
     });
     throw new ErrorServicioIA(mensaje);
@@ -480,7 +488,7 @@ ${listaSkills}`;
     }
   } catch (err) {
     const mensaje = mensajeDeError(err);
-    logger.error({ actor, funcion: 'sugerirRegalos', output: { modelo: modelo(), error: err.message, tipoError: err.name, herramientas: registroHerramientas, duracionMs: Date.now() - inicio }, mensaje });
+    logger.error({ actor, funcion: 'sugerirRegalos', output: { modelo: modelo(), error: errorDeFondo(err).message, tipoError: err.name, status: errorDeFondo(err).statusCode || null, herramientas: registroHerramientas, duracionMs: Date.now() - inicio }, mensaje });
     throw new ErrorServicioIA(mensaje);
   }
 
