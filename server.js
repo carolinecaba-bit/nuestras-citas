@@ -16,6 +16,7 @@ const { TIPOS_CITA, obtenerTipoPorId } = require('./analizador');
 const { buscarLugares, ErrorServicioLugares, fotoDesdeTags, completarFotosDeWikidata } = require('./lugares');
 const nominatim = require('./nominatim');
 const climaMET = require('./clima-met');
+const usoIA = require('./usoIA');
 const usuarios = require('./usuarios');
 const personas = require('./personas');
 const lugaresGuardados = require('./lugaresGuardados');
@@ -859,7 +860,7 @@ app.get('/api/usuario-actual', async (req, res) => {
     return res.json({ usuario: null, loginConfigurado: auth.credencialesConfiguradas() });
   }
   res.json({
-    usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, avatarUrl: usuario.avatarUrl },
+    usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, avatarUrl: usuario.avatarUrl, esAdmin: esAdmin(usuario) },
     loginConfigurado: true
   });
 });
@@ -964,6 +965,50 @@ app.get('/api/tiendas-detalles', auth.requiereSesion, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Uso de la IA: cada llamada se guarda (de todos los usuarios); GET
+// /api/uso-ia muestra el resumen general, solo a administradores.
+// ---------------------------------------------------------------------------
+function medidorDeUso(req) {
+  const usuarioId = req.session.usuarioId;
+  return (metricas) => usoIA.registrar(usuarioId, metricas).catch((err) => {
+    logger.warning({ actor: actorDePeticion(req), funcion: 'registrarUsoIA', output: { error: err.message }, mensaje: 'No se pudo guardar el uso de la IA' });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Administracion: la lista de correos admin vive en la variable ADMIN_EMAILS
+// (separados por comas), nunca escrita en el codigo.
+// ---------------------------------------------------------------------------
+function correosAdmin() {
+  return (process.env.ADMIN_EMAILS || '').split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+}
+
+function esAdmin(usuario) {
+  return Boolean(usuario && usuario.email && correosAdmin().includes(usuario.email.toLowerCase()));
+}
+
+async function requiereAdmin(req, res, next) {
+  try {
+    const usuario = await usuarios.obtenerUsuarioPorId(req.session.usuarioId);
+    if (!esAdmin(usuario)) {
+      logger.warning({ actor: actorDePeticion(req), funcion: 'requiereAdmin', output: { ruta: req.originalUrl }, mensaje: 'Acceso de administración denegado' });
+      return res.status(403).json({ error: 'no_autorizado', mensaje: 'Esta sección es solo para administradores.' });
+    }
+    next();
+  } catch (err) {
+    manejarError(err, res, 'verificacion de administrador', req);
+  }
+}
+
+app.get('/api/uso-ia', auth.requiereSesion, requiereAdmin, async (req, res) => {
+  try {
+    res.json(await usoIA.resumenGeneral());
+  } catch (err) {
+    manejarError(err, res, 'resumen de uso de IA', req);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/antes-despues?lat=&lon=  — cafes, heladerias y reposterias cerca
 // de un lugar concreto (para antes o despues del plan). Sin IA.
 // ---------------------------------------------------------------------------
@@ -1012,7 +1057,8 @@ app.post('/api/ideas-regalo', auth.requiereSesion, async (req, res) => {
       fecha,
       etiquetaTipo: obtenerTipoPorId(tipo).etiqueta,
       persona,
-      ocasion: ocasion || null
+      ocasion: ocasion || null,
+      alMedir: medidorDeUso(req)
     });
     res.json({ ideas });
   } catch (err) {
@@ -1126,7 +1172,8 @@ app.post('/api/ideas', auth.requiereSesion, async (req, res) => {
       persona,
       cantidad: cantidadFinal,
       tipoPreferido: tipoPreferido || null,
-      herramientas: herramientasDelAgente
+      herramientas: herramientasDelAgente,
+      alMedir: medidorDeUso(req)
     });
     res.json({ ideas });
   } catch (err) {

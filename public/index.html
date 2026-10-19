@@ -106,6 +106,8 @@
       <button type="button" role="tab" class="pestana" data-pestana="citas" aria-selected="false">Citas</button>
       <button type="button" role="tab" class="pestana" data-pestana="personas" aria-selected="false">Personas</button>
       <button type="button" role="tab" class="pestana" data-pestana="ideas" aria-selected="false">Ideas</button>
+      <!-- Solo visible para administradores (ADMIN_EMAILS) -->
+      <button type="button" role="tab" class="pestana oculto" data-pestana="uso" aria-selected="false" id="pestana-uso">Uso de IA</button>
     </nav>
 
     <!-- Inicio -->
@@ -188,6 +190,16 @@
       <div id="tops-cargando" class="cargando oculto">Buscando ideas...</div>
       <div id="tops-mensaje" class="mensaje oculto"></div>
       <div id="lista-tops" class="lista-tops"></div>
+    </section>
+    <!-- Uso de IA -->
+    <section id="panel-uso" class="panel oculto" role="tabpanel">
+      <div class="encabezado-panel">
+        <p class="texto-suave">🔒 Solo tú ves esta sección. Muestra cuántos tokens usa la IA y cuánto costaría, sumando a todos los usuarios de la app.</p>
+        <button type="button" class="btn btn-terciario" id="btn-actualizar-uso">Actualizar</button>
+      </div>
+      <div id="uso-cargando" class="cargando oculto">Cargando el uso de la IA...</div>
+      <div id="uso-mensaje" class="mensaje oculto" role="alert"></div>
+      <div id="uso-contenido"></div>
     </section>
   </main>
 

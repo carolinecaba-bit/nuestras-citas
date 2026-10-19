@@ -104,6 +104,23 @@ CREATE TABLE IF NOT EXISTS eventos_stripe (
   resumen_pago  JSONB
 );
 
+-- Medicion del uso de la IA: una fila por llamada a un agente.
+CREATE TABLE IF NOT EXISTS uso_ia (
+  id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  usuario_id      TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  funcion         TEXT NOT NULL,
+  modelo          TEXT NOT NULL,
+  tokens_entrada  INTEGER NOT NULL DEFAULT 0,
+  tokens_salida   INTEGER NOT NULL DEFAULT 0,
+  pasos           INTEGER NOT NULL DEFAULT 0,
+  duracion_ms     INTEGER NOT NULL DEFAULT 0,
+  exito           BOOLEAN NOT NULL,
+  error           TEXT,
+  costo_usd       NUMERIC(12, 8),
+  creado_en       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS uso_ia_usuario_fecha_idx ON uso_ia (usuario_id, creado_en);
+
 -- Sesiones de login (la usa connect-pg-simple). Asi un reinicio o un
 -- deploy de Render ya no cierra la sesion de todos los usuarios.
 CREATE TABLE IF NOT EXISTS sesiones (

@@ -493,6 +493,25 @@ IA no está disponible.
 Requiere sesión. Floristerías, chocolaterías, reposterías y tiendas de
 regalos cercanas (OpenStreetMap, sin IA).
 
+### Medición del uso de la IA
+
+Cada llamada a un agente (ideas o regalos) se guarda en la tabla `uso_ia`
+con el modelo, los tokens de entrada y salida, los pasos, la duración, si
+funcionó y el **costo estimado**:
+
+    costo = tokens_entrada × precio_entrada + tokens_salida × precio_salida
+
+(precios en dólares por millón de tokens). Los precios de Groq vienen
+incluidos en `usoIA.js`; para agregar o corregir otros sin tocar el código:
+
+    AI_PRECIOS={"google:gemini-3.8-flash":[0.30,2.50]}
+
+La pestaña **Uso de IA** es solo para administradores: muestra lo de hoy y
+del mes, el desglose por modelo y por usuario, y las últimas llamadas de
+todos. Los administradores se definen con la variable `ADMIN_EMAILS`
+(correos separados por comas); para el resto de las cuentas la pestaña no
+aparece y `GET /api/uso-ia` responde `403`.
+
 ### Clima y respaldo
 
 El clima viene de **Open-Meteo**, con caché de 1 hora y un reintento si
@@ -595,6 +614,7 @@ importantes sin año conocido se guarda el año 1904 como marcador.
 | `STRIPE_WEBHOOK_SECRET`  | No          | Signing secret del endpoint de webhook en el Dashboard de Stripe     |
 | `SERPAPI_API_KEY`        | No          | API Key de SerpApi; sin ella, "Ideas y qué hacer" da un aviso claro  |
 | `TOPS_CACHE_HORAS`       | No          | Horas que se reutiliza un resultado antes de rebuscar (por defecto 24) |
+| `ADMIN_EMAILS`           | No          | Correos (separados por comas) que ven la pestaña Uso de IA            |
 | `OVERPASS_URLS`          | No          | Servidores de OpenStreetMap (Overpass) separados por comas; si no se define, usa private.coffee, VK Maps y overpass-api.de |
 | `AI_MODEL`               | No          | Proveedor y modelo del agente de ideas (`proveedor:modelo`)           |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | No    | Llave de Google Gemini (si `AI_MODEL` empieza con `google:`)          |

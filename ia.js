@@ -178,6 +178,20 @@ function errorDeFondo(err) {
   return err && err.lastError ? err.lastError : err;
 }
 
+/**
+ * Entrega las metricas de una ejecucion (tokens, pasos, duracion) a quien
+ * las quiera guardar (el servidor las registra en la tabla uso_ia). Nunca
+ * interrumpe al agente si falla.
+ */
+function reportarMedicion(alMedir, datos) {
+  if (typeof alMedir !== 'function') return;
+  try {
+    Promise.resolve(alMedir(datos)).catch(() => {});
+  } catch (err) {
+    // La medicion es un extra: nunca rompe la respuesta.
+  }
+}
+
 function mensajeDeError(errOriginal) {
   const err = errorDeFondo(errOriginal);
   const status = err.statusCode;
@@ -202,7 +216,7 @@ function mensajeDeError(errOriginal) {
  */
 // `modeloDePrueba` solo lo usan las pruebas automaticas (un modelo
 // simulado del AI SDK); en la app siempre se usa AI_MODEL.
-async function sugerirIdeas({ actor, fecha, ubicacion, persona = null, cantidad = 3, tipoPreferido = null, herramientas, modeloDePrueba = null }) {
+async function sugerirIdeas({ actor, fecha, ubicacion, persona = null, cantidad = 3, tipoPreferido = null, herramientas, modeloDePrueba = null, alMedir = null }) {
   if (!modeloDePrueba && !modelo()) throw new ErrorServicioIA('la IA no está configurada en este servidor (falta AI_MODEL)');
   if (!modeloDePrueba && !credencialesConfiguradas()) {
     throw new ErrorServicioIA(`la IA no está configurada en este servidor (falta ${LLAVES_POR_PROVEEDOR[proveedorDelModelo()] || 'la llave del proveedor'})`);
@@ -367,8 +381,11 @@ async function sugerirIdeas({ actor, fecha, ubicacion, persona = null, cantidad 
       output: { modelo: modelo(), error: errorDeFondo(err).message, tipoError: err.name, status: errorDeFondo(err).statusCode || null, status: err.statusCode || null, herramientas: registroHerramientas, duracionMs: Date.now() - inicio },
       mensaje
     });
+    reportarMedicion(alMedir, { funcion: 'ideas', modelo: modeloDePrueba ? 'prueba' : modelo(), tokensEntrada: uso.entrada, tokensSalida: uso.salida, pasos, duracionMs: Date.now() - inicio, exito: false, error: mensaje });
     throw new ErrorServicioIA(mensaje);
   }
+
+  reportarMedicion(alMedir, { funcion: 'ideas', modelo: modeloDePrueba ? 'prueba' : modelo(), tokensEntrada: uso.entrada, tokensSalida: uso.salida, pasos, duracionMs: Date.now() - inicio, exito: Boolean(resultadoAceptado && resultadoAceptado.length), error: resultadoAceptado ? null : 'no entregó ideas' });
 
   logger.info({
     actor,
@@ -399,7 +416,7 @@ async function sugerirIdeas({ actor, fecha, ubicacion, persona = null, cantidad 
 const CATEGORIAS_REGALO = ['flores', 'dulce', 'experiencia', 'objeto', 'carta', 'comida'];
 const PRESUPUESTOS = ['bajo', 'medio', 'alto'];
 
-async function sugerirRegalos({ actor, fecha, etiquetaTipo, persona = null, ocasion = null, modeloDePrueba = null }) {
+async function sugerirRegalos({ actor, fecha, etiquetaTipo, persona = null, ocasion = null, modeloDePrueba = null, alMedir = null }) {
   if (!modeloDePrueba && !modelo()) throw new ErrorServicioIA('la IA no está configurada en este servidor (falta AI_MODEL)');
   if (!modeloDePrueba && !credencialesConfiguradas()) {
     throw new ErrorServicioIA(`la IA no está configurada en este servidor (falta ${LLAVES_POR_PROVEEDOR[proveedorDelModelo()] || 'la llave del proveedor'})`);
@@ -515,9 +532,12 @@ ${listaSkills}`;
     }
   } catch (err) {
     const mensaje = mensajeDeError(err);
+    reportarMedicion(alMedir, { funcion: 'regalos', modelo: modeloDePrueba ? 'prueba' : modelo(), tokensEntrada: uso.entrada, tokensSalida: uso.salida, pasos, duracionMs: Date.now() - inicio, exito: false, error: mensaje });
     logger.error({ actor, funcion: 'sugerirRegalos', output: { modelo: modelo(), error: errorDeFondo(err).message, tipoError: err.name, status: errorDeFondo(err).statusCode || null, herramientas: registroHerramientas, duracionMs: Date.now() - inicio }, mensaje });
     throw new ErrorServicioIA(mensaje);
   }
+
+  reportarMedicion(alMedir, { funcion: 'regalos', modelo: modeloDePrueba ? 'prueba' : modelo(), tokensEntrada: uso.entrada, tokensSalida: uso.salida, pasos, duracionMs: Date.now() - inicio, exito: Boolean(aceptadas && aceptadas.length), error: aceptadas ? null : 'no entregó regalos' });
 
   logger.info({
     actor,

@@ -268,6 +268,7 @@ function irAPestana(nombre) {
     panel.classList.toggle('oculto', panel.id !== `panel-${nombre}`);
   });
   if (nombre === 'ideas' && !$('tabs-tops').children.length) cargarCategoriasTops();
+  if (nombre === 'uso') cargarUsoIA();
 }
 
 document.querySelectorAll('.pestana').forEach((p) => {
@@ -2174,6 +2175,110 @@ async function cargarTops(categoriaId) {
 }
 
 // -----------------------------------------------------------------------
+// Uso de IA: tokens, duracion y costo estimado de cada llamada
+// -----------------------------------------------------------------------
+const NOMBRES_FUNCION_IA = { ideas: 'Ideas de planes', regalos: 'Ideas de regalo' };
+const numero = (n) => Number(n || 0).toLocaleString('es-DO');
+
+function formatearCosto(costo) {
+  if (costo === null || costo === undefined) return 'sin precio';
+  if (costo === 0) return '$0';
+  return costo < 0.01 ? `$${costo.toFixed(5)}` : `$${costo.toFixed(2)}`;
+}
+
+function tarjetaTotales(titulo, t) {
+  return `
+    <section class="bloque uso-tarjeta">
+      <h2>${titulo}</h2>
+      <dl class="numeros">
+        <div><dt>Llamadas</dt><dd>${numero(t.llamadas)}</dd></div>
+        <div><dt>Usuarios</dt><dd>${numero(t.usuarios)}</dd></div>
+        <div><dt>Exitosas</dt><dd>${numero(t.exitosas)}</dd></div>
+        <div><dt>Tokens de entrada</dt><dd>${numero(t.tokens_entrada)}</dd></div>
+        <div><dt>Tokens de salida</dt><dd>${numero(t.tokens_salida)}</dd></div>
+        <div><dt>Costo estimado</dt><dd>${formatearCosto(t.costo)}</dd></div>
+        <div><dt>Duración promedio</dt><dd>${(t.duracion_promedio / 1000).toFixed(1)} s</dd></div>
+      </dl>
+      ${t.sin_precio ? `<p class="vacio-chico">${t.sin_precio} ${t.sin_precio === 1 ? 'llamada usó' : 'llamadas usaron'} un modelo sin precio configurado y no ${t.sin_precio === 1 ? 'suma' : 'suman'} al costo.</p>` : ''}
+    </section>`;
+}
+
+async function cargarUsoIA() {
+  ocultarMensaje($('uso-mensaje'));
+  $('uso-cargando').classList.remove('oculto');
+  try {
+    const d = await llamarApi('/api/uso-ia');
+    const precio = d.precioModeloActual;
+    $('uso-contenido').innerHTML = `
+      <div class="uso-modelo">
+        <p><strong>Modelo en uso:</strong> <code>${escaparHtml(d.modeloActual || 'sin configurar')}</code>
+        ${precio ? `<span class="texto-suave">($${precio[0].toFixed(precio[0] < 0.1 ? 3 : 2)} por millón de tokens de entrada y $${precio[1].toFixed(2)} por millón de salida)</span>` : '<span class="texto-suave">(sin precio configurado; agrégalo con la variable AI_PRECIOS)</span>'}</p>
+        <p class="uso-formula">Costo = tokens de entrada × precio de entrada + tokens de salida × precio de salida</p>
+      </div>
+
+      <div class="uso-rejilla">
+        ${tarjetaTotales('Hoy', d.hoy)}
+        ${tarjetaTotales('Este mes', d.mes)}
+      </div>
+
+      <section class="bloque">
+        <h2>Por modelo, este mes</h2>
+        ${d.porModelo.length ? `
+          <div class="tabla-scroll"><table class="tabla-uso">
+            <thead><tr><th>Modelo</th><th>Llamadas</th><th>Tokens entrada</th><th>Tokens salida</th><th>Costo</th></tr></thead>
+            <tbody>${d.porModelo.map((m) => `
+              <tr><td><code>${escaparHtml(m.modelo)}</code></td><td>${numero(m.llamadas)}</td><td>${numero(m.tokens_entrada)}</td><td>${numero(m.tokens_salida)}</td><td>${formatearCosto(m.costo)}</td></tr>`).join('')}
+            </tbody>
+          </table></div>` : '<p class="vacio-chico">Todavía no has usado la IA este mes.</p>'}
+      </section>
+
+      <section class="bloque">
+        <h2>Por usuario, este mes</h2>
+        ${d.porUsuario.length ? `
+          <div class="tabla-scroll"><table class="tabla-uso">
+            <thead><tr><th>Usuario</th><th>Llamadas</th><th>Exitosas</th><th>Tokens entrada</th><th>Tokens salida</th><th>Costo</th><th>Última</th></tr></thead>
+            <tbody>${d.porUsuario.map((u) => `
+              <tr>
+                <td><strong>${escaparHtml(u.nombre || '')}</strong><br><span class="texto-suave">${escaparHtml(u.email || '')}</span></td>
+                <td>${numero(u.llamadas)}</td><td>${numero(u.exitosas)}</td>
+                <td>${numero(u.tokens_entrada)}</td><td>${numero(u.tokens_salida)}</td>
+                <td>${formatearCosto(u.costo)}</td>
+                <td>${new Date(u.ultima).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>` : '<p class="vacio-chico">Nadie ha usado la IA este mes.</p>'}
+      </section>
+
+      <section class="bloque">
+        <h2>Últimas llamadas</h2>
+        ${d.ultimas.length ? `
+          <div class="tabla-scroll"><table class="tabla-uso">
+            <thead><tr><th>Cuándo</th><th>Usuario</th><th>Función</th><th>Modelo</th><th>Entrada</th><th>Salida</th><th>Pasos</th><th>Duración</th><th>Costo</th><th>Resultado</th></tr></thead>
+            <tbody>${d.ultimas.map((u) => `
+              <tr>
+                <td>${new Date(u.creado_en).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
+                <td>${escaparHtml(u.email || '')}</td>
+                <td>${escaparHtml(NOMBRES_FUNCION_IA[u.funcion] || u.funcion)}</td>
+                <td><code>${escaparHtml(u.modelo)}</code></td>
+                <td>${numero(u.tokens_entrada)}</td><td>${numero(u.tokens_salida)}</td><td>${u.pasos}</td>
+                <td>${(u.duracion_ms / 1000).toFixed(1)} s</td>
+                <td>${formatearCosto(u.costo)}</td>
+                <td>${u.exito ? '<span class="estado-ok">✓ Bien</span>' : `<span class="estado-error" title="${escaparHtml(u.error || '')}">✗ Falló</span>`}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>` : '<p class="vacio-chico">Cuando alguien pida ideas o regalos, aquí verás cada llamada.</p>'}
+      </section>`;
+  } catch (err) {
+    $('uso-contenido').innerHTML = '';
+    mostrarMensaje($('uso-mensaje'), err.message);
+  } finally {
+    $('uso-cargando').classList.add('oculto');
+  }
+}
+
+$('btn-actualizar-uso').addEventListener('click', cargarUsoIA);
+
+// -----------------------------------------------------------------------
 // Google Calendar
 // -----------------------------------------------------------------------
 /**
@@ -2240,6 +2345,9 @@ function mostrarApp(usuario) {
   usuarioActual = usuario;
   $('puerta-login').classList.add('oculto');
   $('contenido-app').classList.remove('oculto');
+  // La pestaña de uso de IA solo existe para administradores (el servidor
+  // igual rechaza a cualquier otra cuenta).
+  $('pestana-uso').classList.toggle('oculto', !usuario.esAdmin);
   const primerNombre = (usuario.nombre || '').split(' ')[0];
   $('saludo-titulo').textContent = primerNombre ? `Hola, ${primerNombre}` : 'Hola';
 
