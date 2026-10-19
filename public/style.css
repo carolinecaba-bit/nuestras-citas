@@ -967,6 +967,22 @@ textarea { resize: vertical; }
 }
 @media (min-width: 821px) and (max-width: 1100px) { .uso-tarjeta .numeros { grid-template-columns: repeat(2, 1fr); } }
 
+.admin-seccion { font-size: 22px; margin: 28px 0 14px; }
+#errores-contenido .admin-seccion:first-child { margin-top: 4px; }
+#errores-contenido > .bloque { margin-bottom: 18px; }
+.barras-error { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.barras-error li { display: grid; grid-template-columns: 150px 1fr auto; gap: 10px; align-items: center; font-size: 14px; }
+.barra-pista { height: 10px; background: var(--fondo); border-radius: 999px; overflow: hidden; }
+.barra-relleno { display: block; height: 100%; border-radius: 999px; background: var(--alerta); }
+.barra-relleno.causa-ia { background: var(--acento); }
+.barra-relleno.causa-clima { background: var(--precaucion); }
+.barra-relleno.causa-lugares { background: var(--bien); }
+.barra-relleno.causa-ideas_blogs { background: var(--dorado); }
+.barra-valor { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tasa-ia { margin: 16px 0 0; font-size: 14px; }
+.celda-mensaje { max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) { .barras-error li { grid-template-columns: 1fr auto; } .barra-pista { grid-column: 1 / -1; grid-row: 2; } }
+
 /* ---------- Mapas y fotos de lugares ---------- */
 
 .mapa {

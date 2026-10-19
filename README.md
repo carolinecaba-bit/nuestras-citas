@@ -506,11 +506,22 @@ incluidos en `usoIA.js`; para agregar o corregir otros sin tocar el código:
 
     AI_PRECIOS={"google:gemini-3.8-flash":[0.30,2.50]}
 
-La pestaña **Uso de IA** es solo para administradores: muestra lo de hoy y
+La sección **Uso de IA** de la pestaña Administración es solo para administradores: muestra lo de hoy y
 del mes, el desglose por modelo y por usuario, y las últimas llamadas de
 todos. Los administradores se definen con la variable `ADMIN_EMAILS`
 (correos separados por comas); para el resto de las cuentas la pestaña no
 aparece y `GET /api/uso-ia` responde `403`.
+
+### Errores que vieron los usuarios
+
+Cada respuesta de error del servidor (estado 500 o más) se guarda en la
+tabla `errores_app` con el usuario, la ruta, el mensaje que vio y una causa:
+IA (límite, saturada, tiempo agotado, configuración), clima, lugares, ideas
+de blogs o error interno. Los errores de validación (400) no se guardan, y
+nunca se guarda lo que escribió el usuario. La pestaña **Administración**
+(solo para `ADMIN_EMAILS`) los muestra agrupados por causa, con la tasa de
+error de la IA y los últimos errores; `GET /api/admin/errores` devuelve lo
+mismo en JSON.
 
 ### Clima y respaldo
 

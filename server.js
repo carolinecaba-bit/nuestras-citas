@@ -17,6 +17,7 @@ const { buscarLugares, ErrorServicioLugares, fotoDesdeTags, completarFotosDeWiki
 const nominatim = require('./nominatim');
 const climaMET = require('./clima-met');
 const usoIA = require('./usoIA');
+const erroresApp = require('./erroresApp');
 const usuarios = require('./usuarios');
 const personas = require('./personas');
 const lugaresGuardados = require('./lugaresGuardados');
@@ -142,6 +143,12 @@ app.use(session({
   }
 }));
 
+// Registra cada error (estado >= 500) que llega a un usuario, para la vista
+// de administracion. Va despues de la sesion para saber quien lo vio.
+app.use('/api', erroresApp.middlewareRegistro((err) => {
+  console.warn(`[errores] No se pudo registrar un error: ${err.message}`);
+}));
+
 // ---------------------------------------------------------------------------
 // Utilidades compartidas (clima)
 // ---------------------------------------------------------------------------
@@ -151,6 +158,10 @@ async function fetchConTimeout(url, timeoutMs = TIMEOUT_MS) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { signal: controller.signal });
+  } catch (err) {
+    // Sin conexion o tiempo agotado: es una falla del servicio externo, no
+    // un error interno (asi el usuario ve un mensaje claro y no un 500).
+    throw new ErrorServicioExterno(err.name === 'AbortError' ? 'el servicio tardó demasiado en responder' : 'no se pudo conectar con el servicio');
   } finally {
     clearTimeout(timer);
   }
@@ -999,6 +1010,14 @@ async function requiereAdmin(req, res, next) {
     manejarError(err, res, 'verificacion de administrador', req);
   }
 }
+
+app.get('/api/admin/errores', auth.requiereSesion, requiereAdmin, async (req, res) => {
+  try {
+    res.json(await erroresApp.resumen());
+  } catch (err) {
+    manejarError(err, res, 'resumen de errores', req);
+  }
+});
 
 app.get('/api/uso-ia', auth.requiereSesion, requiereAdmin, async (req, res) => {
   try {

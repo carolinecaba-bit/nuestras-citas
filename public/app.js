@@ -268,7 +268,7 @@ function irAPestana(nombre) {
     panel.classList.toggle('oculto', panel.id !== `panel-${nombre}`);
   });
   if (nombre === 'ideas' && !$('tabs-tops').children.length) cargarCategoriasTops();
-  if (nombre === 'uso') cargarUsoIA();
+  if (nombre === 'uso') cargarAdministracion();
 }
 
 document.querySelectorAll('.pestana').forEach((p) => {
@@ -2276,7 +2276,71 @@ async function cargarUsoIA() {
   }
 }
 
-$('btn-actualizar-uso').addEventListener('click', cargarUsoIA);
+// --- Errores que vieron los usuarios ---
+const CAUSAS_ERROR = {
+  ia_limite: 'IA: límite de uso',
+  ia_saturada: 'IA: proveedor saturado',
+  ia_tiempo: 'IA: tiempo agotado',
+  ia_configuracion: 'IA: configuración',
+  ia_otro: 'IA: otro error',
+  clima: 'Clima',
+  lugares: 'Lugares',
+  ideas_blogs: 'Ideas de blogs',
+  interno: 'Error interno'
+};
+
+function barrasPorCausa(filas) {
+  if (!filas.length) return '<p class="vacio-chico">Sin errores. 🎉</p>';
+  const maximo = Math.max(...filas.map((f) => f.cantidad));
+  return `<ul class="barras-error">${filas.map((f) => `
+    <li>
+      <span class="barra-etiqueta">${escaparHtml(CAUSAS_ERROR[f.causa] || f.causa)}</span>
+      <span class="barra-pista"><span class="barra-relleno causa-${f.causa.startsWith('ia_') ? 'ia' : f.causa}" style="width:${Math.max(4, (f.cantidad / maximo) * 100)}%"></span></span>
+      <span class="barra-valor">${numero(f.cantidad)} <span class="texto-suave">(${f.usuarios} ${f.usuarios === 1 ? 'usuario' : 'usuarios'})</span></span>
+    </li>`).join('')}</ul>`;
+}
+
+async function cargarErrores() {
+  const d = await llamarApi('/api/admin/errores');
+  const tasa = d.tasaIA.llamadas ? Math.round((d.tasaIA.fallidas / d.tasaIA.llamadas) * 100) : null;
+  $('errores-contenido').innerHTML = `
+    <h2 class="admin-seccion">Errores que vieron los usuarios</h2>
+    <div class="uso-rejilla">
+      <section class="bloque"><h2>Hoy, por causa</h2>${barrasPorCausa(d.hoy)}</section>
+      <section class="bloque"><h2>Este mes, por causa</h2>${barrasPorCausa(d.mes)}
+        <p class="tasa-ia">Tasa de error de la IA este mes: <strong>${tasa === null ? 'sin llamadas' : `${tasa} %`}</strong>
+        ${tasa === null ? '' : `<span class="texto-suave">(${d.tasaIA.fallidas} de ${d.tasaIA.llamadas} llamadas)</span>`}</p>
+      </section>
+    </div>
+    <section class="bloque">
+      <h2>Últimos errores</h2>
+      ${d.ultimos.length ? `
+        <div class="tabla-scroll"><table class="tabla-uso">
+          <thead><tr><th>Cuándo</th><th>Usuario</th><th>Dónde</th><th>Causa</th><th>Mensaje que vio</th></tr></thead>
+          <tbody>${d.ultimos.map((e) => `
+            <tr>
+              <td>${new Date(e.creado_en).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
+              <td>${escaparHtml(e.email || 'sin sesión')}</td>
+              <td><code>${escaparHtml(`${e.metodo} ${e.ruta}`)}</code></td>
+              <td><span class="estado-error">${escaparHtml(CAUSAS_ERROR[e.causa] || e.causa)}</span></td>
+              <td class="celda-mensaje" title="${escaparHtml(e.mensaje || '')}">${escaparHtml(e.mensaje || '')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>` : '<p class="vacio-chico">Ningún usuario ha visto errores todavía.</p>'}
+    </section>
+    <h2 class="admin-seccion">Uso de IA</h2>`;
+}
+
+async function cargarAdministracion() {
+  ocultarMensaje($('uso-mensaje'));
+  try {
+    await Promise.all([cargarErrores(), cargarUsoIA()]);
+  } catch (err) {
+    mostrarMensaje($('uso-mensaje'), err.message);
+  }
+}
+
+$('btn-actualizar-uso').addEventListener('click', cargarAdministracion);
 
 // -----------------------------------------------------------------------
 // Google Calendar

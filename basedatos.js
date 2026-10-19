@@ -121,6 +121,19 @@ CREATE TABLE IF NOT EXISTS uso_ia (
 );
 CREATE INDEX IF NOT EXISTS uso_ia_usuario_fecha_idx ON uso_ia (usuario_id, creado_en);
 
+-- Errores que vieron los usuarios (respuestas 500 o mas), para administracion.
+CREATE TABLE IF NOT EXISTS errores_app (
+  id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  usuario_id  TEXT REFERENCES usuarios(id) ON DELETE SET NULL,
+  metodo      TEXT NOT NULL,
+  ruta        TEXT NOT NULL,
+  status      INTEGER NOT NULL,
+  causa       TEXT NOT NULL,
+  mensaje     TEXT,
+  creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS errores_app_fecha_idx ON errores_app (creado_en);
+
 -- Sesiones de login (la usa connect-pg-simple). Asi un reinicio o un
 -- deploy de Render ya no cierra la sesion de todos los usuarios.
 CREATE TABLE IF NOT EXISTS sesiones (
