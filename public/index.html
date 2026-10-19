@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Leaflet: mapas de OpenStreetMap, gratis y sin llave -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -276,13 +278,38 @@
 
           <div class="seccion-sugerencias">
             <div class="sugerencias-encabezado">
-              <p class="campo-etiqueta" id="titulo-sugerencias">Lugares cercanos <span class="texto-suave">(opcional)</span></p>
-              <button type="button" id="btn-ver-sugerencias" class="btn btn-terciario">Ver sugerencias</button>
+              <p class="campo-etiqueta" id="titulo-sugerencias"></p>
+              <button type="button" id="btn-ver-sugerencias" class="btn btn-terciario">Buscar de nuevo</button>
             </div>
-            <div id="lugares-cargando" class="cargando oculto">Buscando lugares cercanos...</div>
+            <button type="button" class="enlace" id="btn-cambiar-modo-lugar"></button>
+            <div id="lugar-concreto" class="lugar-concreto oculto"></div>
+            <div id="lugares-cargando" class="cargando oculto">Buscando lugares para tu plan…</div>
             <div id="lugares-mensaje" class="mensaje oculto"></div>
+            <div id="mapa-detalles" class="mapa oculto" aria-label="Mapa del plan"></div>
             <div id="lista-lugares" class="lista-lugares"></div>
+            <div id="bloque-antes-despues" class="oculto">
+              <p class="campo-etiqueta">☕ Para antes o después <span class="texto-suave">(cafés, heladerías y reposterías a pocos minutos)</span></p>
+              <div id="antes-despues-cargando" class="cargando oculto">Buscando qué hay cerca…</div>
+              <div id="antes-despues-mensaje" class="mensaje oculto"></div>
+              <div id="lista-antes-despues" class="lista-lugares"></div>
+            </div>
           </div>
+
+          <section id="seccion-detalle" class="seccion-detalle oculto" aria-labelledby="titulo-detalle">
+            <p class="campo-etiqueta" id="titulo-detalle">🎁 Un detalle especial <span id="detalle-motivo" class="texto-suave"></span></p>
+            <div id="detalles-rapidos" class="chips"></div>
+            <input type="text" id="cita-detalle" maxlength="200" placeholder="O escribe el tuyo, ej: llevarle girasoles" aria-label="Detalle especial" autocomplete="off" />
+            <div class="detalle-botones">
+              <button type="button" class="btn btn-secundario" id="btn-ideas-regalo">✨ Ideas de regalo</button>
+              <button type="button" class="btn btn-terciario" id="btn-tiendas">Dónde conseguirlo</button>
+            </div>
+            <div id="regalos-cargando" class="cargando-agente oculto">El agente está pensando en regalos para esta ocasión…</div>
+            <div id="regalos-mensaje" class="mensaje oculto" role="alert"></div>
+            <div id="lista-regalos" class="lista-ideas"></div>
+            <div id="tiendas-cargando" class="cargando oculto">Buscando floristerías, reposterías y tiendas de regalos…</div>
+            <div id="tiendas-mensaje" class="mensaje oculto"></div>
+            <div id="lista-tiendas" class="lista-lugares"></div>
+          </section>
           <div id="mensaje-form" class="mensaje oculto" role="alert"></div>
         </section>
 
@@ -338,6 +365,7 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

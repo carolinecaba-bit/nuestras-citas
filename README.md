@@ -75,7 +75,16 @@ y horas por franja), con quién, dónde (con tus lugares guardados) y detalles.
     "Qué" ofrece "✨ Sugiéreme ideas" usando la fecha, el lugar, el clima y
     la persona elegida. Las ideas las genera un **agente con herramientas**
     (ver la sección "El agente de ideas").
-14. **Registro de actividad (logs)**: cada petición a la app queda
+14. **Mapas y fotos de lugares**: mapas de OpenStreetMap (Leaflet) al
+    elegir el lugar, en los lugares sugeridos (marcadores numerados) y en
+    cada cita. Las fotos salen gratis de OpenStreetMap, Wikimedia Commons o
+    Wikidata cuando el lugar las tiene; si no, se muestra el ícono del plan.
+15. **Detalle especial**: en citas románticas, cumpleaños y fechas
+    importantes, el paso Detalles ofrece detalles rápidos (flores, bizcocho,
+    carta...), "✨ Ideas de regalo" con IA y tiendas cercanas (floristerías,
+    reposterías, regalos). El detalle se guarda con la cita, aparece como
+    recordatorio y se incluye en Google Calendar.
+16. **Registro de actividad (logs)**: cada petición a la app queda
     registrada en `logs/AAAAMMDD.log` (un archivo por día) con fecha,
     nivel (INFO/WARNING/ERROR), quién la hizo, en qué ruta ocurrió, qué se
     envió y qué se respondió — útil para depurar sin tener que adivinar
@@ -223,6 +232,11 @@ sin tocar el código.
 | `buscarLugaresCercanos` | Lugares reales cercanos por tipo de plan (OpenStreetMap) |
 | `consultarSkill` | Lee una guía de la carpeta `skills/` |
 | `entregarIdeas` | Su respuesta final, validada con un esquema Zod |
+
+Un segundo agente, `sugerirRegalos`, propone regalos y detalles con el mismo
+patrón: consulta la skill `regalos-y-detalles` y entrega con
+`entregarRegalos`, que exige 3 ideas variadas (al menos dos categorías y dos
+presupuestos) y le devuelve los errores si no cumple.
 
 **Skills:** cada archivo `.md` de `skills/` es una guía con `name` y
 `description` en el encabezado. El agente solo recibe la lista de nombres y
@@ -470,6 +484,26 @@ Devuelve `{ ideas: [{ tipo, titulo, descripcion, momento, lugar }] }`,
 generadas por el agente. `lugar` es un lugar real de OpenStreetMap o `null`.
 Si la IA no está configurada o falla, devuelve `503` con un mensaje claro.
 
+### `POST /api/ideas-regalo`
+Requiere sesión. Cuerpo: `{ fecha, tipo, personaId?, ocasion? }`. Devuelve
+`{ ideas: [{ categoria, titulo, descripcion, presupuesto }] }`. `503` si la
+IA no está disponible.
+
+### `GET /api/tiendas-detalles?lat=&lon=`
+Requiere sesión. Floristerías, chocolaterías, reposterías y tiendas de
+regalos cercanas (OpenStreetMap, sin IA).
+
+### Búsqueda de lugares y respaldo
+
+- `GET /api/geocode` combina dos fuentes: **Nominatim** (buscador de
+  OpenStreetMap) para lugares específicos en RD, como universidades o
+  restaurantes, y **Open-Meteo** para ciudades, primero de RD y luego del
+  mundo. Si una falla, se usa la otra.
+- Las sugerencias de lugares usan **Overpass**; si ningún servidor responde,
+  se buscan con **Nominatim** como respaldo.
+- Nominatim se usa según su política: máximo 1 petición por segundo (las
+  demás esperan su turno), identificación de la app y caché de 24 horas.
+
 ### `GET /api/clima?lat=&lon=&fecha=`
 Requiere sesión. Pronóstico de un día (lo usa el bloque Hoy).
 
@@ -549,6 +583,7 @@ importantes sin año conocido se guarda el año 1904 como marcador.
 | `STRIPE_WEBHOOK_SECRET`  | No          | Signing secret del endpoint de webhook en el Dashboard de Stripe     |
 | `SERPAPI_API_KEY`        | No          | API Key de SerpApi; sin ella, "Ideas y qué hacer" da un aviso claro  |
 | `TOPS_CACHE_HORAS`       | No          | Horas que se reutiliza un resultado antes de rebuscar (por defecto 24) |
+| `OVERPASS_URLS`          | No          | Servidores de OpenStreetMap (Overpass) separados por comas; si no se define, usa private.coffee, VK Maps y overpass-api.de |
 | `AI_MODEL`               | No          | Proveedor y modelo del agente de ideas (`proveedor:modelo`)           |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | No    | Llave de Google Gemini (si `AI_MODEL` empieza con `google:`)          |
 | `GROQ_API_KEY`           | No          | Llave de Groq (si `AI_MODEL` empieza con `groq:`)                     |

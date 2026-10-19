@@ -15,6 +15,7 @@ function aCita(fila) {
     hora: fila.hora,
     ubicacion: fila.ubicacion,
     lugarSugerido: fila.lugar_sugerido,
+    detalle: fila.detalle || null,
     creadoEn: fila.creado_en.toISOString()
   };
 }
@@ -36,10 +37,11 @@ async function obtenerCitaPorId(id, usuarioId) {
 
 async function crearCita(datos) {
   const { rows } = await consulta(
-    `INSERT INTO citas (usuario_id, titulo, tipo, persona_id, fecha, hora, ubicacion, lugar_sugerido)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    `INSERT INTO citas (usuario_id, titulo, tipo, persona_id, fecha, hora, ubicacion, lugar_sugerido, detalle)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
     [datos.usuarioId, datos.titulo, datos.tipo, datos.personaId, datos.fecha, datos.hora,
-      JSON.stringify(datos.ubicacion), datos.lugarSugerido ? JSON.stringify(datos.lugarSugerido) : null]
+      JSON.stringify(datos.ubicacion), datos.lugarSugerido ? JSON.stringify(datos.lugarSugerido) : null,
+      datos.detalle || null]
   );
   return aCita(rows[0]);
 }

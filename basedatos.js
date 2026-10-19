@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS citas (
   creado_en       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS citas_usuario_fecha_idx ON citas (usuario_id, fecha);
+-- Agregado despues: el detalle especial (flores, regalo...) de la cita.
+ALTER TABLE citas ADD COLUMN IF NOT EXISTS detalle TEXT;
 
 CREATE TABLE IF NOT EXISTS lugares_guardados (
   id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -90,6 +92,8 @@ CREATE TABLE IF NOT EXISTS lugares_guardados (
   usado_en    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS lugares_usuario_idx ON lugares_guardados (usuario_id);
+-- Agregado despues: si el lugar es concreto (universidad, restaurante) o una zona (ciudad).
+ALTER TABLE lugares_guardados ADD COLUMN IF NOT EXISTS especifico BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS eventos_stripe (
   id            TEXT PRIMARY KEY,

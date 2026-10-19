@@ -19,6 +19,7 @@ function aLugar(fila) {
     lat: fila.lat,
     lon: fila.lon,
     favorito: fila.favorito,
+    especifico: fila.especifico === true,
     usadoEn: fila.usado_en.toISOString()
   };
 }
@@ -47,7 +48,7 @@ async function obtenerLugares(usuarioId) {
  * redondeada a ~100 m), actualiza la fecha de uso; si no, lo crea como
  * reciente. Con `favorito: true` ademas lo marca como favorito.
  */
-async function registrarUso(usuarioId, { nombre, lat, lon }, { favorito = false, alias = null } = {}) {
+async function registrarUso(usuarioId, { nombre, lat, lon, especifico = false }, { favorito = false, alias = null } = {}) {
   const { rows: existentes } = await consulta(
     `SELECT * FROM lugares_guardados
      WHERE usuario_id = $1 AND round(lat * 1000) = round($2::numeric * 1000) AND round(lon * 1000) = round($3::numeric * 1000)
@@ -60,9 +61,12 @@ async function registrarUso(usuarioId, { nombre, lat, lon }, { favorito = false,
     const { rows } = await consulta(
       `UPDATE lugares_guardados SET usado_en = now(),
          favorito = favorito OR $2,
-         alias = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE alias END
+         alias = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE alias END,
+         especifico = $4
        WHERE id = $1 RETURNING *`,
-      [existentes[0].id, favorito, alias]
+      // "especifico" toma el ultimo uso: asi se corrige si la persona
+      // cambio un lugar de zona a lugar concreto (o al reves).
+      [existentes[0].id, favorito, alias, especifico === true]
     );
     fila = rows[0];
   } else {
@@ -75,9 +79,9 @@ async function registrarUso(usuarioId, { nombre, lat, lon }, { favorito = false,
       }
     }
     const { rows } = await consulta(
-      `INSERT INTO lugares_guardados (usuario_id, nombre, alias, lat, lon, favorito)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [usuarioId, nombre, alias, lat, lon, favorito]
+      `INSERT INTO lugares_guardados (usuario_id, nombre, alias, lat, lon, favorito, especifico)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [usuarioId, nombre, alias, lat, lon, favorito, especifico === true]
     );
     fila = rows[0];
   }

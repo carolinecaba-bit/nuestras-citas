@@ -13,7 +13,8 @@ const crypto = require('crypto');
 const basedatos = require('./basedatos');
 const db = require('./db');
 const { TIPOS_CITA, obtenerTipoPorId } = require('./analizador');
-const { buscarLugares, ErrorServicioLugares } = require('./lugares');
+const { buscarLugares, ErrorServicioLugares, fotoDesdeTags, completarFotosDeWikidata } = require('./lugares');
+const nominatim = require('./nominatim');
 const usuarios = require('./usuarios');
 const personas = require('./personas');
 const lugaresGuardados = require('./lugaresGuardados');
@@ -343,21 +344,46 @@ app.get('/api/geocode', async (req, res) => {
       return (await respuesta.json()).results || [];
     };
 
-    let enRD = [];
-    let enMundo = [];
-    try {
-      [enRD, enMundo] = await Promise.all([pedir('DO'), pedir(null)]);
-    } catch (errServicio) {
+    // Dos fuentes en paralelo:
+    //  - Nominatim: lugares especificos en RD (universidades, restaurantes...)
+    //  - Open-Meteo: ciudades y pueblos, primero en RD y luego en el mundo
+    // Si una falla, se usa la otra.
+    const [nomRes, omRD, omMundo] = await Promise.allSettled([
+      nominatim.buscarPorNombre(q.trim(), { pais: 'do', limite: 6 }),
+      pedir('DO'),
+      pedir(null)
+    ]);
+    if ([nomRes, omRD, omMundo].every((r) => r.status === 'rejected')) {
       return res.status(502).json({
         error: 'error_servicio_externo',
-        mensaje: `El servicio de geocodificacion no respondio (${errServicio.message}).`
+        mensaje: `El servicio de búsqueda de lugares no respondió (${omMundo.reason.message}).`
       });
     }
+    if (nomRes.status === 'rejected') {
+      logger.warning({ actor: actorDePeticion(req), funcion: 'GET /api/geocode', output: { error: nomRes.reason.message }, mensaje: 'Nominatim no respondió; solo ciudades de Open-Meteo' });
+    }
 
+    // Lugares concretos traen su foto si OpenStreetMap la tiene.
+    const crudosNominatim = (nomRes.status === 'fulfilled' ? nomRes.value : []).map((r) => ({
+      ...r, foto: r.especifico ? fotoDesdeTags(r.extratags) : null,
+      wikidata: r.especifico && /^Q\d+$/.test(r.extratags.wikidata || '') ? r.extratags.wikidata : null
+    }));
+    await completarFotosDeWikidata(crudosNominatim);
+    const deNominatim = crudosNominatim.map((r) => ({
+      nombre: r.nombre, region: r.region, pais: r.pais, latitud: r.lat, longitud: r.lon,
+      especifico: r.especifico, foto: r.foto || null
+    }));
+    const deOpenMeteo = [
+      ...(omRD.status === 'fulfilled' ? omRD.value : []),
+      ...(omMundo.status === 'fulfilled' ? omMundo.value : [])
+    ].map((r) => ({ nombre: r.name, region: r.admin1 || null, pais: r.country || null, latitud: r.latitude, longitud: r.longitude, especifico: false, foto: null }));
+
+    // Sin duplicados: mismo nombre a menos de ~1 km se muestra una vez.
     const vistos = new Set();
-    const combinados = [...enRD, ...enMundo].filter((r) => {
-      if (vistos.has(r.id)) return false;
-      vistos.add(r.id);
+    const combinados = [...deNominatim, ...deOpenMeteo].filter((r) => {
+      const clave = `${r.nombre.toLowerCase()}|${r.latitud.toFixed(2)}|${r.longitud.toFixed(2)}`;
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
       return true;
     }).slice(0, 8);
 
@@ -368,15 +394,7 @@ app.get('/api/geocode', async (req, res) => {
       });
     }
 
-    res.json({
-      resultados: combinados.map((r) => ({
-        nombre: r.name,
-        pais: r.country || null,
-        region: r.admin1 || null,
-        latitud: r.latitude,
-        longitud: r.longitude
-      }))
-    });
+    res.json({ resultados: combinados });
   } catch (err) {
     manejarError(err, res, 'geocodificacion', req);
   }
@@ -605,9 +623,24 @@ function validarUbicacion(ubicacion, campo) {
   return errores;
 }
 
+const DETALLE_MAX = 200;
+
+/** Solo se guardan fotos https con un credito de texto (vienen de OpenStreetMap/Wikimedia). */
+function limpiarFoto(foto) {
+  if (!foto || typeof foto.url !== 'string' || !/^https:\/\//.test(foto.url)) return null;
+  return {
+    url: foto.url.slice(0, 600),
+    credito: typeof foto.credito === 'string' ? foto.credito.slice(0, 80) : 'la fuente',
+    enlaceCredito: typeof foto.enlaceCredito === 'string' && /^https:\/\//.test(foto.enlaceCredito) ? foto.enlaceCredito.slice(0, 600) : null
+  };
+}
+
 function validarCita(body) {
   const errores = [];
-  const { titulo, tipo, personaId, fecha, hora, ubicacion, lugarSugerido } = body || {};
+  const { titulo, tipo, personaId, fecha, hora, ubicacion, lugarSugerido, detalle } = body || {};
+  if (detalle !== undefined && detalle !== null && (typeof detalle !== 'string' || detalle.trim().length > DETALLE_MAX)) {
+    errores.push(`El detalle especial puede tener hasta ${DETALLE_MAX} caracteres.`);
+  }
 
   // El titulo ahora es opcional: si se deja vacio, se genera uno
   // automaticamente a partir del tipo de plan y la persona elegida.
@@ -661,7 +694,7 @@ app.post('/api/citas', auth.requiereSesion, async (req, res) => {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
   }
 
-  const { titulo, tipo, personaId, fecha, hora, ubicacion, lugarSugerido } = req.body;
+  const { titulo, tipo, personaId, fecha, hora, ubicacion, lugarSugerido, detalle } = req.body;
 
   try {
     // Si se indico un personaId, confirmamos que sea un perfil del
@@ -689,16 +722,19 @@ app.post('/api/citas', auth.requiereSesion, async (req, res) => {
       ubicacion: {
         nombre: ubicacion.nombre.trim(),
         lat: Number(ubicacion.lat),
-        lon: Number(ubicacion.lon)
+        lon: Number(ubicacion.lon),
+        especifico: ubicacion.especifico === true
       },
       lugarSugerido: lugarSugerido
         ? {
             nombre: lugarSugerido.nombre.trim(),
             lat: Number(lugarSugerido.lat),
             lon: Number(lugarSugerido.lon),
-            enlaceMapa: lugarSugerido.enlaceMapa || null
+            enlaceMapa: lugarSugerido.enlaceMapa || null,
+            foto: limpiarFoto(lugarSugerido.foto)
           }
-        : null
+        : null,
+      detalle: detalle && detalle.trim() ? detalle.trim() : null
     });
     // El lugar usado se guarda solo en "Recientes". Es un extra: si
     // falla, la cita ya quedo guardada y no se interrumpe nada.
@@ -852,6 +888,89 @@ function climaATextoDescriptivo(resultado) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/tiendas-detalles?lat=&lon=  — floristerias, regalos, chocolates y
+// reposterias cercanas (OpenStreetMap, sin IA)
+// ---------------------------------------------------------------------------
+const TAGS_TIENDAS_DETALLES = ['shop=florist', 'shop=gift', 'shop=chocolate', 'shop=confectionery', 'shop=pastry', 'shop=bakery'];
+
+app.get('/api/tiendas-detalles', auth.requiereSesion, async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  if (Number.isNaN(lat) || lat < -90 || lat > 90 || Number.isNaN(lon) || lon < -180 || lon > 180) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'Las coordenadas no son válidas.' });
+  }
+  try {
+    const tiendas = await buscarLugares(TAGS_TIENDAS_DETALLES, lat, lon, { radioMetros: 5000, maximo: 8 });
+    res.json({ tiendas });
+  } catch (err) {
+    if (err instanceof ErrorServicioLugares) {
+      return res.status(502).json({ error: 'error_servicio_externo', mensaje: 'No se pudieron buscar tiendas cercanas en este momento.' });
+    }
+    manejarError(err, res, 'tiendas para detalles', req);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/antes-despues?lat=&lon=  — cafes, heladerias y reposterias cerca
+// de un lugar concreto (para antes o despues del plan). Sin IA.
+// ---------------------------------------------------------------------------
+const TAGS_ANTES_DESPUES = ['amenity=cafe', 'amenity=ice_cream', 'shop=pastry'];
+
+app.get('/api/antes-despues', auth.requiereSesion, async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  if (Number.isNaN(lat) || lat < -90 || lat > 90 || Number.isNaN(lon) || lon < -180 || lon > 180) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'Las coordenadas no son válidas.' });
+  }
+  try {
+    const lugares = await buscarLugares(TAGS_ANTES_DESPUES, lat, lon, { radioMetros: 1500, maximo: 6 });
+    res.json({ lugares });
+  } catch (err) {
+    if (err instanceof ErrorServicioLugares) {
+      return res.status(502).json({ error: 'error_servicio_externo', mensaje: 'No se pudieron buscar lugares cercanos en este momento.' });
+    }
+    manejarError(err, res, 'lugares para antes o despues', req);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/ideas-regalo  — el agente propone regalos o detalles
+// body: { fecha, tipo, personaId?, ocasion? }
+// ---------------------------------------------------------------------------
+app.post('/api/ideas-regalo', auth.requiereSesion, async (req, res) => {
+  const { fecha, tipo, personaId, ocasion } = req.body || {};
+  if (!fecha || typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'Debes indicar una fecha válida.' });
+  }
+  if (!tipo || !obtenerTipoPorId(tipo)) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'El tipo de plan no es válido.' });
+  }
+  if (ocasion !== undefined && ocasion !== null && (typeof ocasion !== 'string' || ocasion.length > 60)) {
+    return res.status(400).json({ error: 'parametro_invalido', mensaje: 'La ocasión no es válida.' });
+  }
+  try {
+    let persona = null;
+    if (personaId) {
+      persona = await personas.obtenerPersonaPorId(personaId, req.session.usuarioId);
+      if (!persona) return res.status(400).json({ error: 'datos_invalidos', mensaje: 'El perfil seleccionado no existe.' });
+    }
+    const ideas = await ia.sugerirRegalos({
+      actor: actorDePeticion(req),
+      fecha,
+      etiquetaTipo: obtenerTipoPorId(tipo).etiqueta,
+      persona,
+      ocasion: ocasion || null
+    });
+    res.json({ ideas });
+  } catch (err) {
+    if (err instanceof ia.ErrorServicioIA) {
+      return res.status(503).json({ error: 'error_servicio_externo', mensaje: `No se pudieron generar ideas de regalo (${err.message}).` });
+    }
+    manejarError(err, res, 'ideas de regalo', req);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/clima?lat=&lon=&fecha=  — pronostico de un dia (bloque "Hoy")
 // ---------------------------------------------------------------------------
 app.get('/api/clima', auth.requiereSesion, async (req, res) => {
@@ -988,7 +1107,7 @@ app.get('/api/lugares-guardados', auth.requiereSesion, async (req, res) => {
 
 // Guarda un lugar como favorito (o lo marca, si ya estaba en recientes).
 app.post('/api/lugares-guardados', auth.requiereSesion, async (req, res) => {
-  const { nombre, lat, lon, alias } = req.body || {};
+  const { nombre, lat, lon, alias, especifico } = req.body || {};
   const errores = validarUbicacion({ nombre, lat, lon }, 'el lugar');
   const errorAlias = validarAlias(alias);
   if (errorAlias) errores.push(errorAlias);
@@ -998,7 +1117,7 @@ app.post('/api/lugares-guardados', auth.requiereSesion, async (req, res) => {
   try {
     const lugar = await lugaresGuardados.registrarUso(
       req.session.usuarioId,
-      { nombre: nombre.trim(), lat: Number(lat), lon: Number(lon) },
+      { nombre: nombre.trim(), lat: Number(lat), lon: Number(lon), especifico: especifico === true },
       { favorito: true, alias: alias && alias.trim() ? alias.trim() : null }
     );
     res.status(201).json({ lugar });

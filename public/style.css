@@ -929,6 +929,125 @@ textarea { resize: vertical; }
 .confirmacion .btn { text-decoration: none; }
 .confirmacion-nota { font-size: 13px; }
 
+/* ---------- Mapas y fotos de lugares ---------- */
+
+.mapa {
+  height: 240px;
+  margin-top: 12px;
+  border-radius: var(--radio);
+  border: 1px solid var(--borde);
+  overflow: hidden;
+  z-index: 0; /* que Leaflet no tape paneles y avisos */
+}
+.mapa-chico { height: 170px; }
+.mapa-cita { height: 200px; }
+.leaflet-container { font-family: 'Karla', sans-serif; }
+
+.marcador {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(42, 47, 82, 0.35);
+}
+.marcador-lugar { background: var(--acento); }
+.marcador-elegido { background: var(--dorado); transform: scale(1.15); }
+.marcador-tienda { background: var(--superficie); font-size: 15px; border-color: var(--dorado); }
+.marcador-centro { background: var(--superficie); font-size: 15px; border-color: var(--acento); }
+
+.lugar-foto {
+  position: relative;
+  margin: -12px -14px 10px;
+  height: 110px;
+  background: var(--acento-tenue);
+  border-radius: var(--radio-chico) var(--radio-chico) 0 0;
+  overflow: hidden;
+}
+.lugar-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lugar-foto figcaption {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(42, 47, 82, 0.65);
+  color: white;
+  font-size: 11px;
+}
+.lugar-foto figcaption a { color: white; }
+.lugar-foto-icono { display: none; }
+.lugar-foto.sin-foto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(-45deg, var(--acento-tenue) 0 12px, #E3E7F7 12px 24px);
+}
+.lugar-foto.sin-foto .lugar-foto-icono { display: block; width: 34px; height: 34px; color: var(--acento); opacity: 0.7; }
+.lugar-foto.sin-foto .lugar-foto-icono svg { width: 100%; height: 100%; }
+.lugar-foto.sin-foto figcaption { display: none; }
+.lugar-foto .icono-emoji { font-size: 30px; line-height: 34px; display: block; text-align: center; }
+
+.lugar-card { width: 220px; }
+.lugar-card-ancha { width: 100%; max-width: 420px; }
+.lugar-card-ancha .lugar-foto { height: 150px; }
+.lugar-concreto { margin-top: 10px; }
+#btn-cambiar-modo-lugar { font-size: 13px; margin-top: 2px; }
+.marcador-grande { transform: scale(1.2); }
+#bloque-antes-despues { margin-top: 14px; }
+.lugar-card.resaltada { animation: resaltar 1.2s ease-out; }
+@keyframes resaltar { 0% { box-shadow: 0 0 0 4px var(--dorado); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.numero-lugar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--acento);
+  color: white;
+  font-size: 11px;
+  vertical-align: 1px;
+}
+.lugar-card.elegido .numero-lugar { background: var(--dorado); }
+
+.idea .lugar-foto { margin: -14px -16px 6px; height: 120px; border-radius: 0; }
+.idea-emoji { font-size: 22px; line-height: 1; }
+
+/* Detalle especial */
+.seccion-detalle {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: var(--radio);
+  background: var(--dorado-tenue);
+}
+.seccion-detalle .campo-etiqueta { margin-top: 0; }
+.seccion-detalle input { margin-top: 10px; }
+.detalle-botones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.seccion-detalle .lista-ideas { grid-template-columns: 1fr; }
+
+/* Detalle y mapa en la tarjeta de cita y en la postal */
+.cita-detalle {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radio-chico);
+  background: var(--dorado-tenue);
+  color: var(--precaucion);
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-block;
+}
+.cita-foto .lugar-foto { margin: 10px 0 0; height: 140px; border-radius: var(--radio-chico); }
+.cita-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.cita-acciones .cita-calendario { background: none; font-family: inherit; cursor: pointer; }
+.postal-regalo { margin: 8px 0 0; font-weight: 600; color: var(--precaucion); }
+
 /* ---------- Panel lateral (personas) ---------- */
 
 .panel-lateral { position: fixed; inset: 0; z-index: 40; }

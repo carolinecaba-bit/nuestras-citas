@@ -1,15 +1,18 @@
 // -----------------------------------------------------------------------
 // Iconos (SVG en linea, minimalistas, heredan el color via currentColor)
 // -----------------------------------------------------------------------
+// Iconos de los tipos de plan (mismo trazo para todos).
 const ICONOS_TIPO = {
-  picnic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16l-2 9H6L4 10Z"/><path d="M8 10a4 4 0 0 1 8 0"/></svg>',
-  cena: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1 6a4 4 0 0 1-8 0L7 3Z"/><path d="M12 13v6M9 21h6"/></svg>',
-  cafe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z"/><path d="M17 9h1a3 3 0 0 1 0 6h-1"/><path d="M7 3c.5 1 .5 2 0 3M11 3c.5 1 .5 2 0 3"/></svg>',
-  caminata: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="7" rx="2" ry="3"/><ellipse cx="15.5" cy="15" rx="2" ry="3"/></svg>',
-  playa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 15c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 19c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/></svg>',
-  mirador: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3"/><path d="M3 18l5-6 4 4 3-3 6 5"/></svg>',
-  cine: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9Z"/><path d="M3 9l2-5h4l-2 5M11 9l2-5h4l-2 5"/></svg>',
-  otro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.35-9.5-8.5C.7 8 2 4 6 4c2 0 3.5 1 4 2 .5-1 2-2 4-2 4 0 5.3 4 3.5 7.5C19 15.65 12 20 12 20Z"/></svg>'
+  picnic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18l-1.7 8.3a1 1 0 0 1-1 .7H5.7a1 1 0 0 1-1-.7L3 11Z"/><path d="M7.5 11 10 5.5M16.5 11 14 5.5"/><path d="M4 15.5h16"/><path d="M9.5 11v9M14.5 11v9"/></svg>',
+  cena: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l-.4 5a3.6 3.6 0 0 1-7.2 0L8 3Z"/><path d="M8.3 6.5h7.4"/><path d="M12 11.6V20M8.5 20.5h7"/></svg>',
+  almuerzo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="5"/><circle cx="12" cy="13" r="2.4"/><path d="M3.5 4v4.5a1.5 1.5 0 0 0 3 0V4M5 10v10"/><path d="M20.5 4c-1.6.4-2.6 2.4-2.6 5.5h2.6V20"/></svg>',
+  cafe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h11v4a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9Z"/><path d="M16 10.5h1.2a2.3 2.3 0 0 1 0 4.6H16"/><path d="M3.5 21h15"/><path d="M8.5 3.5c-.6.8-.6 1.7 0 2.5M12.5 3.5c-.6.8-.6 1.7 0 2.5"/></svg>',
+  caminata: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V3"/><path d="M12 5h6l2 2.2-2 2.2h-6"/><path d="M12 12H6.2l-2 2.2 2 2.2H12"/><path d="M9 21h6"/></svg>',
+  playa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.2a8 8 0 0 1 7.3 7.5L4.7 11.2a8 8 0 0 1 7.8-7Z"/><path d="M12.2 11.4 14.6 18"/><path d="M2 20.5c2-1.3 4-1.3 6 0s4 1.3 6 0 4-1.3 6 0"/></svg>',
+  mirador: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17h19"/><path d="M7 17a5 5 0 0 1 10 0"/><path d="M12 6.5V9M5.8 9.8l1.6 1.6M18.2 9.8l-1.6 1.6M3 13.7h1.8M19.2 13.7H21"/><path d="M6 20.5h12"/></svg>',
+  cine: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9.5h14l-1.7 10.6a1 1 0 0 1-1 .9H7.7a1 1 0 0 1-1-.9L5 9.5Z"/><path d="M9.7 9.5l.4 11.5M14.3 9.5l-.4 11.5"/><path d="M6.2 9.5a2.1 2.1 0 0 1 1.4-3.4 2.6 2.6 0 0 1 4.4-1.7 2.6 2.6 0 0 1 4.4 1.7 2.1 2.1 0 0 1 1.4 3.4"/></svg>',
+  viaje: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="18" height="12.5" rx="2"/><path d="M9 7.5V5.5a1.2 1.2 0 0 1 1.2-1.2h3.6A1.2 1.2 0 0 1 15 5.5v2"/><path d="M8 7.5V20M16 7.5V20"/></svg>',
+  otro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3.5l1.7 4.4 4.4 1.7-4.4 1.7L11 15.7l-1.7-4.4L4.9 9.6l4.4-1.7L11 3.5Z"/><path d="M18 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/></svg>'
 };
 
 const ICONOS_CLIMA = {
@@ -330,6 +333,45 @@ function renderizarTodo() {
 }
 
 // -----------------------------------------------------------------------
+// Mapas (Leaflet + OpenStreetMap, gratis) y fotos de lugares
+// -----------------------------------------------------------------------
+/** Crea un mapa en `el`. Si Leaflet no cargo (sin internet), no rompe nada. */
+function crearMapa(el, lat, lon, zoom = 14) {
+  if (!window.L || !el) return null;
+  const mapa = L.map(el, { scrollWheelZoom: false, attributionControl: true }).setView([lat, lon], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+  }).addTo(mapa);
+  setTimeout(() => mapa.invalidateSize(), 60); // por si el contenedor acaba de mostrarse
+  return mapa;
+}
+
+/** Marcador redondo con un texto (numero o emoji) y un estilo. */
+function marcador(lat, lon, texto, clase) {
+  return L.marker([lat, lon], {
+    icon: L.divIcon({ className: '', html: `<span class="marcador ${clase}">${texto}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] })
+  });
+}
+
+/** Foto de un lugar (si existe) o un recuadro con el icono del plan. */
+function htmlFotoLugar(lugar, tipoId) {
+  const icono = tipoId === 'tienda' ? '<span class="icono-emoji">🎁</span>' : (ICONOS_TIPO[tipoId] || ICONOS_TIPO.otro);
+  if (lugar.foto && lugar.foto.url) {
+    const credito = lugar.foto.enlaceCredito
+      ? `<a href="${lugar.foto.enlaceCredito}" target="_blank" rel="noopener">${escaparHtml(lugar.foto.credito)}</a>`
+      : escaparHtml(lugar.foto.credito);
+    return `
+      <figure class="lugar-foto">
+        <img src="${lugar.foto.url}" alt="${escaparHtml(lugar.nombre)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('figure').classList.add('sin-foto'); this.remove();" />
+        <figcaption>Foto: ${credito}</figcaption>
+        <span class="lugar-foto-icono">${icono}</span>
+      </figure>`;
+  }
+  return `<figure class="lugar-foto sin-foto"><span class="lugar-foto-icono">${icono}</span></figure>`;
+}
+
+// -----------------------------------------------------------------------
 // Inicio
 // -----------------------------------------------------------------------
 function renderizarInicio() {
@@ -374,6 +416,7 @@ function renderizarProximaCita() {
         <p class="postal-detalle">
           ${persona ? `Con ${escaparHtml(persona.nombre)} en ` : 'En '}${escaparHtml(lugar.nombre)}
         </p>
+        ${cita.detalle ? `<p class="postal-regalo">🎁 No olvides: ${escaparHtml(cita.detalle)}</p>` : ''}
         <a class="cita-calendario" href="${generarUrlGoogleCalendar(cita, persona)}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
         <div class="cita-clima" data-clima-id="${cita.id}">Cargando clima...</div>
       </div>
@@ -640,9 +683,30 @@ function crearTarjetaCita(cita) {
     <div class="cita-meta">${formatearFechaHora(cita)}${conQuienTexto}</div>
     ${esSuCumpleanos ? `<div class="cita-cumpleanos">🎂 ¡Es el cumpleaños de ${escaparHtml(persona.nombre)}!</div>` : ''}
     <div class="cita-lugar">${enlaceLugar}</div>
-    <a class="cita-calendario" href="${generarUrlGoogleCalendar(cita, persona)}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
+    ${cita.detalle ? `<div class="cita-detalle">🎁 ${escaparHtml(cita.detalle)}</div>` : ''}
+    ${cita.lugarSugerido && cita.lugarSugerido.foto ? `<div class="cita-foto">${htmlFotoLugar(cita.lugarSugerido, cita.tipo)}</div>` : ''}
+    <div class="cita-acciones">
+      <a class="cita-calendario" href="${generarUrlGoogleCalendar(cita, persona)}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
+      <button type="button" class="cita-calendario btn-ver-mapa" aria-expanded="false">🗺️ Ver en el mapa</button>
+    </div>
+    <div class="mapa mapa-cita oculto"></div>
     <div class="cita-clima" data-clima-id="${cita.id}">Cargando clima...</div>
   `;
+
+  // El mapa de cada cita se crea solo al abrirlo (para no cargar mapas de mas).
+  let mapaCita = null;
+  const botonMapa = card.querySelector('.btn-ver-mapa');
+  botonMapa.addEventListener('click', () => {
+    const contenedor = card.querySelector('.mapa-cita');
+    const abrir = contenedor.classList.contains('oculto');
+    contenedor.classList.toggle('oculto', !abrir);
+    botonMapa.setAttribute('aria-expanded', String(abrir));
+    botonMapa.textContent = abrir ? '🗺️ Ocultar mapa' : '🗺️ Ver en el mapa';
+    if (abrir && !mapaCita) {
+      mapaCita = crearMapa(contenedor, lugar.lat, lugar.lon, 15);
+      if (mapaCita) marcador(lugar.lat, lugar.lon, '📍', 'marcador-centro').bindTooltip(lugar.nombre).addTo(mapaCita);
+    }
+  });
 
   const botonEliminar = card.querySelector('.btn-eliminar');
   botonEliminar.addEventListener('click', () => {
@@ -1078,6 +1142,10 @@ function abrirAsistente(prefill = {}, pasoInicial = 1) {
   lugaresSugeridos = borrador.lugarElegido ? [borrador.lugarElegido] : [];
   claveIdeasAsistente = null;
   $('cita-titulo').value = titulo;
+  reiniciarMapaDetalles();
+  $('cita-detalle').value = '';
+  $('lista-regalos').innerHTML = '';
+  ['regalos-mensaje', 'tiendas-mensaje'].forEach((id) => ocultarMensaje($(id)));
   $('ideas-asistente-lista').innerHTML = '';
   ocultarMensaje($('ideas-asistente-mensaje'));
   $('buscar-lugar').value = '';
@@ -1374,13 +1442,31 @@ function renderizarUbicacionElegida() {
     <div id="form-favorito" class="form-favorito oculto">
       <input type="text" id="alias-favorito" maxlength="30" placeholder="Nombre corto (opcional), ej: Casa" aria-label="Nombre corto para este lugar" />
       <button type="button" class="btn btn-secundario" id="btn-confirmar-favorito">Guardar</button>
-    </div>`;
+    </div>
+    <div id="mapa-donde" class="mapa mapa-chico" aria-label="Mapa de ${escaparHtml(u.nombre)}"></div>`;
+  if (mapaDonde) mapaDonde.remove();
+  mapaDonde = crearMapa($('mapa-donde'), u.lat, u.lon, 12);
+  if (mapaDonde) marcador(u.lat, u.lon, '📍', 'marcador-centro').addTo(mapaDonde);
+}
+let mapaDonde = null;
+
+function reiniciarMapaDetalles() {
+  if (mapaDetalles) mapaDetalles.remove();
+  mapaDetalles = null;
+  capaDetalles = null;
+  tiendasDetalle = [];
+  antesDespues = [];
+  claveSugerencias = null;
+  claveAntesDespues = null;
+  $('lista-tiendas').innerHTML = '';
+  $('lista-antes-despues').innerHTML = '';
 }
 
 function fijarUbicacion(ubicacion) {
   borrador.ubicacion = ubicacion;
   borrador.lugarElegido = null;
   lugaresSugeridos = [];
+  reiniciarMapaDetalles();
   $('lista-resultados-ubicacion').innerHTML = '';
   ocultarMensaje($('mensaje-donde'));
   renderizarPasoDonde();
@@ -1409,7 +1495,7 @@ $('lugares-guardados').addEventListener('click', async (evento) => {
   const elegir = evento.target.closest('[data-lugar-guardado]');
   if (!elegir) return;
   const lugar = lugaresGuardados.find((l) => l.id === elegir.dataset.lugarGuardado);
-  if (lugar) fijarUbicacion({ nombre: lugar.nombre, lat: lugar.lat, lon: lugar.lon });
+  if (lugar) fijarUbicacion({ nombre: lugar.nombre, lat: lugar.lat, lon: lugar.lon, especifico: lugar.especifico === true });
 });
 
 $('ubicacion-seleccionada').addEventListener('click', async (evento) => {
@@ -1421,7 +1507,7 @@ $('ubicacion-seleccionada').addEventListener('click', async (evento) => {
   if (evento.target.closest('#btn-confirmar-favorito')) {
     try {
       const u = borrador.ubicacion;
-      await enviarJson('/api/lugares-guardados', 'POST', { ...u, alias: $('alias-favorito').value.trim() || null });
+      await enviarJson('/api/lugares-guardados', 'POST', { nombre: u.nombre, lat: u.lat, lon: u.lon, especifico: u.especifico === true, alias: $('alias-favorito').value.trim() || null });
       await cargarLugaresGuardados();
       renderizarPasoDonde();
       avisar('Lugar guardado en tus favoritos');
@@ -1449,13 +1535,13 @@ async function buscarUbicacion() {
     }
     lista.innerHTML = data.resultados.map((lugar, i) => {
       const detalle = [lugar.region, lugar.pais].filter(Boolean).join(', ');
-      return `<li><button type="button" data-resultado="${i}"><strong>${escaparHtml(lugar.nombre)}</strong>${detalle ? `<span>${escaparHtml(detalle)}</span>` : ''}</button></li>`;
+      return `<li><button type="button" data-resultado="${i}"><strong>${lugar.especifico ? '📍' : '🏙️'} ${escaparHtml(lugar.nombre)}</strong>${detalle ? `<span>${escaparHtml(detalle)}</span>` : ''}</button></li>`;
     }).join('');
     lista.onclick = (e) => {
       const boton = e.target.closest('[data-resultado]');
       if (!boton) return;
       const lugar = data.resultados[Number(boton.dataset.resultado)];
-      fijarUbicacion({ nombre: lugar.nombre, lat: lugar.latitud, lon: lugar.longitud });
+      fijarUbicacion({ nombre: lugar.nombre, lat: lugar.latitud, lon: lugar.longitud, especifico: lugar.especifico === true, foto: lugar.foto || null });
     };
   } catch (err) {
     mostrarMensaje(mensaje, err.message);
@@ -1498,10 +1584,150 @@ function renderizarPasoDetalles() {
       ${capitalizar(formatearFechaLarga(borrador.fecha))}${hora ? `, ${hora}` : ''}<br>
       ${escaparHtml(borrador.ubicacion.nombre)}
     </p>`;
-  $('titulo-sugerencias').innerHTML = `Lugares para tu plan en ${escaparHtml(borrador.ubicacion.nombre)} <span class="texto-suave">(opcional)</span>`;
-
-  renderizarLugares();
+  renderizarSeccionLugares();
+  renderizarSeccionDetalle();
 }
+
+// -----------------------------------------------------------------------
+// Detalle especial (flores, regalos...) para citas romanticas y fechas
+// especiales
+// -----------------------------------------------------------------------
+const RELACIONES_PAREJA = ['novia', 'novio', 'esposa', 'esposo', 'pareja', 'prometida', 'prometido'];
+
+/** Devuelve el motivo para mostrar la seccion, o null si no aplica. */
+function motivoDetalleEspecial() {
+  const persona = borrador.personaId ? buscarPersonaPorId(borrador.personaId) : null;
+  if (persona && borrador.fecha) {
+    if (persona.cumpleanos && persona.cumpleanos.slice(5) === borrador.fecha.slice(5)) return { texto: `(es el cumpleaños de ${persona.nombre})`, ocasion: 'Cumpleaños' };
+    const fecha = (persona.fechasImportantes || []).find((f) => f.fecha.slice(5) === borrador.fecha.slice(5));
+    if (fecha) return { texto: `(es ${fecha.nombre.toLowerCase()} con ${persona.nombre})`, ocasion: fecha.nombre };
+  }
+  if (borrador.tipo === 'cena') return { texto: '(plan romántico)', ocasion: 'Cita romántica' };
+  if (persona && RELACIONES_PAREJA.includes((persona.relacion || '').toLowerCase())) return { texto: '(cita en pareja)', ocasion: 'Cita romántica' };
+  return null;
+}
+
+function detallesRapidos() {
+  const persona = borrador.personaId ? buscarPersonaPorId(borrador.personaId) : null;
+  const lista = ['💐 Flores', '🍫 Chocolates', '🎂 Un bizcocho', '✉️ Una carta a mano', '🎶 Una playlist', '📷 Una foto impresa'];
+  if (persona && persona.comidaFavorita) lista.push(`🍽️ Su comida favorita: ${persona.comidaFavorita}`);
+  return lista;
+}
+
+const sinEmoji = (texto) => texto.replace(/^\S+\s/, '');
+function partesDetalle() {
+  return $('cita-detalle').value.split(',').map((p) => p.trim()).filter(Boolean);
+}
+
+function renderizarSeccionDetalle() {
+  const motivo = motivoDetalleEspecial();
+  $('seccion-detalle').classList.toggle('oculto', !motivo);
+  if (!motivo) return;
+  $('detalle-motivo').textContent = motivo.texto;
+  const actuales = partesDetalle().map((p) => p.toLowerCase());
+  $('detalles-rapidos').innerHTML = detallesRapidos().map((d) => {
+    const activo = actuales.includes(sinEmoji(d).toLowerCase());
+    return `<button type="button" class="chip ${activo ? 'activo' : ''}" data-detalle="${escaparHtml(d)}" aria-pressed="${activo}">${escaparHtml(d)}</button>`;
+  }).join('');
+}
+
+/** Agrega o quita una parte del texto del detalle (separado por comas). */
+function alternarParteDetalle(texto) {
+  const partes = partesDetalle();
+  const i = partes.findIndex((p) => p.toLowerCase() === texto.toLowerCase());
+  if (i >= 0) partes.splice(i, 1); else partes.push(texto);
+  $('cita-detalle').value = partes.join(', ').slice(0, 200);
+  renderizarSeccionDetalle();
+}
+
+$('detalles-rapidos').addEventListener('click', (evento) => {
+  const chip = evento.target.closest('[data-detalle]');
+  if (chip) alternarParteDetalle(sinEmoji(chip.dataset.detalle));
+});
+$('cita-detalle').addEventListener('input', () => renderizarSeccionDetalle());
+
+const ICONOS_REGALO = { flores: '💐', dulce: '🍰', experiencia: '✨', objeto: '🎁', carta: '✉️', comida: '🍽️' };
+let ideasRegalo = [];
+
+$('btn-ideas-regalo').addEventListener('click', async () => {
+  const motivo = motivoDetalleEspecial();
+  ocultarMensaje($('regalos-mensaje'));
+  $('lista-regalos').innerHTML = '';
+  $('regalos-cargando').classList.remove('oculto');
+  $('btn-ideas-regalo').disabled = true;
+  try {
+    const data = await enviarJson('/api/ideas-regalo', 'POST', {
+      fecha: borrador.fecha, tipo: borrador.tipo, personaId: borrador.personaId, ocasion: motivo ? motivo.ocasion : null
+    });
+    ideasRegalo = data.ideas;
+    $('lista-regalos').innerHTML = ideasRegalo.map((r, i) => `
+      <article class="idea">
+        <div class="idea-cabecera">
+          <span class="idea-emoji" aria-hidden="true">${ICONOS_REGALO[r.categoria] || '🎁'}</span>
+          <span class="idea-etiqueta">Presupuesto ${escaparHtml(r.presupuesto)}</span>
+        </div>
+        <h3>${escaparHtml(r.titulo)}</h3>
+        <p>${escaparHtml(r.descripcion)}</p>
+        <button type="button" class="btn btn-terciario" data-regalo="${i}">Usar este detalle</button>
+      </article>`).join('');
+  } catch (err) {
+    mostrarMensaje($('regalos-mensaje'), err.message);
+  } finally {
+    $('regalos-cargando').classList.add('oculto');
+    $('btn-ideas-regalo').disabled = false;
+  }
+});
+
+$('lista-regalos').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-regalo]');
+  if (!boton) return;
+  const regalo = ideasRegalo[Number(boton.dataset.regalo)];
+  if (!partesDetalle().some((p) => p.toLowerCase() === regalo.titulo.toLowerCase())) alternarParteDetalle(regalo.titulo);
+  boton.textContent = 'Agregado ✓';
+  boton.disabled = true;
+});
+
+// --- Donde conseguirlo: tiendas cercanas (OpenStreetMap, sin IA) ---
+const ETIQUETAS_TIENDA = { florist: 'Floristería', gift: 'Regalos', chocolate: 'Chocolatería', confectionery: 'Dulcería', pastry: 'Repostería', bakery: 'Panadería y repostería' };
+
+$('btn-tiendas').addEventListener('click', async () => {
+  ocultarMensaje($('tiendas-mensaje'));
+  $('lista-tiendas').innerHTML = '';
+  $('tiendas-cargando').classList.remove('oculto');
+  $('btn-tiendas').disabled = true;
+  try {
+    const { lat, lon } = borrador.lugarElegido || borrador.ubicacion;
+    tiendasDetalle = (await llamarApi(`/api/tiendas-detalles?lat=${lat}&lon=${lon}`)).tiendas;
+    if (!tiendasDetalle.length) {
+      mostrarMensaje($('tiendas-mensaje'), 'No encontré floristerías ni tiendas de regalos registradas cerca. Prueba buscar en Google Maps.', 'info');
+    }
+    $('lista-tiendas').innerHTML = tiendasDetalle.map((t, i) => `
+      <div class="lugar-card tienda-card">
+        ${htmlFotoLugar(t, 'tienda')}
+        <h4>🎁 ${escaparHtml(t.nombre)}</h4>
+        <div class="distancia">${escaparHtml(ETIQUETAS_TIENDA[t.categoria] || 'Tienda')}, ${t.distanciaKm} km</div>
+        <div class="acciones">
+          <button type="button" class="elegir" data-tienda="${i}">Anotar</button>
+          <a class="enlace-mapa" href="${t.enlaceMapa}" target="_blank" rel="noopener">Abrir en OSM</a>
+        </div>
+      </div>`).join('');
+    renderizarMapaDetalles();
+  } catch (err) {
+    mostrarMensaje($('tiendas-mensaje'), err.message);
+  } finally {
+    $('tiendas-cargando').classList.add('oculto');
+    $('btn-tiendas').disabled = false;
+  }
+});
+
+$('lista-tiendas').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-tienda]');
+  if (!boton) return;
+  const tienda = tiendasDetalle[Number(boton.dataset.tienda)];
+  alternarParteDetalle(`pasar por ${tienda.nombre}`);
+  boton.textContent = 'Anotado ✓';
+  boton.disabled = true;
+});
 
 // -----------------------------------------------------------------------
 // Ideas del agente (bloque "Hoy" y paso "Que" del asistente)
@@ -1514,6 +1740,7 @@ function tarjetaIdea(idea, indice, textoBoton) {
     : '';
   return `
     <article class="idea">
+      ${idea.lugar && idea.lugar.foto ? htmlFotoLugar(idea.lugar, idea.tipo) : ''}
       <div class="idea-cabecera">
         <span class="icono-tipo">${ICONOS_TIPO[idea.tipo] || ICONOS_TIPO.otro}</span>
         <span class="idea-etiqueta">${escaparHtml(etiquetaTipo(idea.tipo))}, ${MOMENTOS[idea.momento] ? MOMENTOS[idea.momento].toLowerCase() : ''}</span>
@@ -1567,40 +1794,175 @@ $('ideas-asistente-lista').addEventListener('click', (evento) => {
   irAPaso(5);
 });
 
-$('btn-ver-sugerencias').addEventListener('click', async () => {
+// --- Si el lugar es una zona: "¿Dónde exactamente?" (se busca solo al entrar) ---
+let claveSugerencias = null;
+let antesDespues = [];
+let claveAntesDespues = null;
+
+async function cargarSugerencias() {
   const mensaje = $('lugares-mensaje');
   ocultarMensaje(mensaje);
-  $('lista-lugares').innerHTML = '';
   $('lugares-cargando').classList.remove('oculto');
+  $('btn-ver-sugerencias').disabled = true;
+  const { lat, lon } = borrador.ubicacion;
+  claveSugerencias = `${lat},${lon},${borrador.tipo}`;
   try {
-    const { lat, lon } = borrador.ubicacion;
     const data = await llamarApi(`/api/sugerencias?lat=${lat}&lon=${lon}&tipo=${encodeURIComponent(borrador.tipo)}`);
     lugaresSugeridos = data.lugares;
+    // Si venia un lugar elegido (por ejemplo, de una idea del agente), se conserva.
+    const elegido = borrador.lugarElegido;
+    if (elegido && !lugaresSugeridos.some((l) => l.lat === elegido.lat && l.lon === elegido.lon)) lugaresSugeridos.unshift(elegido);
     if (!lugaresSugeridos.length) {
-      mostrarMensaje(mensaje, 'No encontré lugares cercanos para este tipo de plan. Puedes guardar la cita solo con la ubicación general.', 'info');
+      mostrarMensaje(mensaje, 'No encontré lugares para este tipo de plan por aquí. Puedes guardar la cita solo con la zona.', 'info');
     }
-    renderizarLugares();
   } catch (err) {
+    claveSugerencias = null;
     mostrarMensaje(mensaje, err.message);
   } finally {
     $('lugares-cargando').classList.add('oculto');
+    $('btn-ver-sugerencias').disabled = false;
+    renderizarLugares();
   }
+}
+
+$('btn-ver-sugerencias').addEventListener('click', cargarSugerencias);
+
+// La clasificacion automatica (zona o lugar concreto) puede fallar: la
+// persona la cambia con un toque, y se recuerda al guardar la cita.
+$('btn-cambiar-modo-lugar').addEventListener('click', () => {
+  borrador.ubicacion = { ...borrador.ubicacion, especifico: !borrador.ubicacion.especifico };
+  if (mapaDetalles) { mapaDetalles.remove(); mapaDetalles = null; capaDetalles = null; }
+  renderizarSeccionLugares();
 });
+
+// --- Si el lugar es concreto: "Para antes o después" ---
+async function cargarAntesDespues() {
+  const { lat, lon } = borrador.ubicacion;
+  claveAntesDespues = `${lat},${lon}`;
+  const mensaje = $('antes-despues-mensaje');
+  ocultarMensaje(mensaje);
+  $('antes-despues-cargando').classList.remove('oculto');
+  try {
+    const data = await llamarApi(`/api/antes-despues?lat=${lat}&lon=${lon}`);
+    // El propio lugar puede salir en los resultados: se quita.
+    antesDespues = data.lugares.filter((l) => l.distanciaKm > 0.05);
+    if (!antesDespues.length) mostrarMensaje(mensaje, 'No encontré cafés ni heladerías registrados a pocos minutos.', 'info');
+    $('lista-antes-despues').innerHTML = antesDespues.map((l) => `
+      <div class="lugar-card">
+        ${htmlFotoLugar(l, 'cafe')}
+        <h4>☕ ${escaparHtml(l.nombre)}</h4>
+        <div class="distancia">A ${l.distanciaKm} km</div>
+        <div class="acciones"><a class="enlace-mapa" href="${l.enlaceMapa}" target="_blank" rel="noopener">Abrir en OSM</a></div>
+      </div>`).join('');
+  } catch (err) {
+    claveAntesDespues = null;
+    mostrarMensaje(mensaje, err.message);
+  } finally {
+    $('antes-despues-cargando').classList.add('oculto');
+    renderizarMapaDetalles();
+  }
+}
+
+function renderizarSeccionLugares() {
+  const u = borrador.ubicacion;
+  const concreto = u.especifico === true;
+  $('btn-ver-sugerencias').classList.toggle('oculto', concreto);
+  $('lugar-concreto').classList.toggle('oculto', !concreto);
+  $('bloque-antes-despues').classList.toggle('oculto', !concreto);
+  $('lista-lugares').classList.toggle('oculto', concreto);
+
+  $('btn-cambiar-modo-lugar').textContent = concreto
+    ? `Ver otros lugares de la zona`
+    : `${u.nombre} ya es el lugar exacto`;
+
+  if (concreto) {
+    borrador.lugarElegido = null; // el lugar ya es la ubicacion elegida
+    $('titulo-sugerencias').textContent = 'Tu lugar';
+    $('lugar-concreto').innerHTML = `
+      <div class="lugar-card lugar-card-ancha elegido">
+        ${htmlFotoLugar(u, borrador.tipo)}
+        <h4>📍 ${escaparHtml(u.nombre)}</h4>
+        <div class="distancia">Lo elegiste en el paso Dónde</div>
+      </div>`;
+    renderizarMapaDetalles();
+    if (claveAntesDespues !== `${u.lat},${u.lon}`) cargarAntesDespues();
+  } else {
+    $('titulo-sugerencias').innerHTML = `¿Dónde exactamente en ${escaparHtml(u.nombre)}? <span class="texto-suave">(opcional)</span>`;
+    renderizarLugares();
+    if (claveSugerencias !== `${u.lat},${u.lon},${borrador.tipo}`) cargarSugerencias();
+  }
+}
 
 function renderizarLugares() {
   const elegido = borrador.lugarElegido;
   $('lista-lugares').innerHTML = lugaresSugeridos.map((lugar, i) => {
     const esElegido = elegido && elegido.lat === lugar.lat && elegido.lon === lugar.lon;
     return `
-      <div class="lugar-card ${esElegido ? 'elegido' : ''}">
-        <h4>${escaparHtml(lugar.nombre)}</h4>
+      <div class="lugar-card ${esElegido ? 'elegido' : ''}" data-indice-lugar="${i}">
+        ${htmlFotoLugar(lugar, borrador.tipo)}
+        <h4><span class="numero-lugar">${i + 1}</span> ${escaparHtml(lugar.nombre)}</h4>
         ${lugar.distanciaKm != null ? `<div class="distancia">${lugar.distanciaKm} km de distancia</div>` : '<div class="distancia">Sugerido por el agente</div>'}
         <div class="acciones">
           <button type="button" class="elegir" data-lugar="${i}" aria-pressed="${Boolean(esElegido)}">${esElegido ? 'Elegido' : 'Elegir'}</button>
-          <a class="enlace-mapa" href="${lugar.enlaceMapa}" target="_blank" rel="noopener">Ver mapa</a>
+          <a class="enlace-mapa" href="${lugar.enlaceMapa}" target="_blank" rel="noopener">Abrir en OSM</a>
         </div>
       </div>`;
   }).join('');
+  renderizarMapaDetalles();
+}
+
+// --- Mapa del paso Detalles: lugares sugeridos (numerados) y tiendas (🎁) ---
+let mapaDetalles = null;
+let capaDetalles = null;
+let tiendasDetalle = [];
+
+function renderizarMapaDetalles() {
+  const contenedor = $('mapa-detalles');
+  const u0 = borrador.ubicacion;
+  const hayAlgo = (u0 && u0.especifico) || lugaresSugeridos.length > 0 || tiendasDetalle.length > 0 || antesDespues.length > 0;
+  contenedor.classList.toggle('oculto', !hayAlgo || !window.L);
+  if (!hayAlgo || !window.L) return;
+  const u = borrador.ubicacion;
+  if (!mapaDetalles) {
+    mapaDetalles = crearMapa(contenedor, u.lat, u.lon, 13);
+    capaDetalles = L.featureGroup().addTo(mapaDetalles);
+  } else {
+    setTimeout(() => mapaDetalles.invalidateSize(), 60);
+  }
+  capaDetalles.clearLayers();
+  if (u.especifico) {
+    marcador(u.lat, u.lon, '📍', 'marcador-centro marcador-grande').bindTooltip(u.nombre).addTo(capaDetalles);
+  }
+  antesDespues.forEach((lugar, i) => {
+    marcador(lugar.lat, lugar.lon, '☕', 'marcador-tienda')
+      .bindTooltip(lugar.nombre)
+      .on('click', () => resaltarTarjeta($('lista-antes-despues'), i))
+      .addTo(capaDetalles);
+  });
+  const elegido = borrador.lugarElegido;
+  lugaresSugeridos.forEach((lugar, i) => {
+    const esElegido = elegido && elegido.lat === lugar.lat && elegido.lon === lugar.lon;
+    marcador(lugar.lat, lugar.lon, i + 1, esElegido ? 'marcador-elegido' : 'marcador-lugar')
+      .bindTooltip(lugar.nombre)
+      .on('click', () => resaltarTarjeta($('lista-lugares'), i))
+      .addTo(capaDetalles);
+  });
+  tiendasDetalle.forEach((tienda, i) => {
+    marcador(tienda.lat, tienda.lon, '🎁', 'marcador-tienda')
+      .bindTooltip(tienda.nombre)
+      .on('click', () => resaltarTarjeta($('lista-tiendas'), i))
+      .addTo(capaDetalles);
+  });
+  if (capaDetalles.getLayers().length) mapaDetalles.fitBounds(capaDetalles.getBounds().pad(0.25), { maxZoom: 16 });
+}
+
+function resaltarTarjeta(lista, indice) {
+  const tarjeta = lista.children[indice];
+  if (!tarjeta) return;
+  tarjeta.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  tarjeta.classList.remove('resaltada');
+  void tarjeta.offsetWidth; // reinicia la animacion
+  tarjeta.classList.add('resaltada');
 }
 
 $('lista-lugares').addEventListener('click', (evento) => {
@@ -1626,7 +1988,8 @@ async function guardarCita() {
       fecha: borrador.fecha,
       hora: borrador.hora,
       ubicacion: borrador.ubicacion,
-      lugarSugerido: borrador.lugarElegido
+      lugarSugerido: borrador.lugarElegido,
+      detalle: $('seccion-detalle').classList.contains('oculto') ? null : ($('cita-detalle').value.trim() || null)
     });
     mostrarConfirmacion(cita);
     await Promise.all([cargarCitas(), cargarLugaresGuardados()]);
@@ -1766,6 +2129,7 @@ function generarUrlGoogleCalendar(cita, persona) {
   const lugar = cita.lugarSugerido || cita.ubicacion;
   if (lugar && lugar.nombre) url.searchParams.set('location', lugar.nombre);
   if (persona && persona.correo) url.searchParams.set('add', persona.correo);
+  if (cita.detalle) url.searchParams.set('details', `🎁 Detalle especial: ${cita.detalle}`);
   return url.toString();
 }
 

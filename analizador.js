@@ -15,6 +15,11 @@ const TIPOS_CITA = [
     tagsOverpass: ['amenity=restaurant']
   },
   {
+    id: 'almuerzo',
+    etiqueta: 'Almuerzo',
+    tagsOverpass: ['amenity=restaurant']
+  },
+  {
     id: 'cafe',
     etiqueta: 'Café o desayuno',
     tagsOverpass: ['amenity=cafe']
@@ -38,6 +43,11 @@ const TIPOS_CITA = [
     id: 'cine',
     etiqueta: 'Cine',
     tagsOverpass: ['amenity=cinema']
+  },
+  {
+    id: 'viaje',
+    etiqueta: 'Viaje o escapada',
+    tagsOverpass: ['tourism=hotel', 'tourism=guest_house', 'tourism=attraction']
   },
   {
     id: 'otro',

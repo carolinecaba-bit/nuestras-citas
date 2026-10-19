@@ -104,4 +104,26 @@ const base = { actor: 'prueba', fecha: '2026-10-24', ubicacion: { nombre: 'Santo
   assert.ok(JSON.stringify(vistos).includes('alerta de tormenta'));
   console.log('OK 4: regla de clima obliga a corregir un plan al aire libre');
 }
+// --- Prueba 5: agente de regalos corrige poca variedad ---
+{
+  const { modelo, vistos } = crearModelo([
+    paso(llamada('1', 'consultarSkill', { nombre: 'regalos-y-detalles' })),
+    paso(llamada('2', 'entregarRegalos', { ideas: [
+      { categoria: 'flores', titulo: 'Rosas', descripcion: 'Clásico.', presupuesto: 'medio' },
+      { categoria: 'flores', titulo: 'Girasoles', descripcion: 'Alegres.', presupuesto: 'medio' },
+      { categoria: 'flores', titulo: 'Tulipanes', descripcion: 'Elegantes.', presupuesto: 'medio' }
+    ] })),
+    paso(llamada('3', 'entregarRegalos', { ideas: [
+      { categoria: 'flores', titulo: 'Ramo de girasoles', descripcion: 'Le alegran el día.', presupuesto: 'medio' },
+      { categoria: 'dulce', titulo: 'Bizcocho de su sabor favorito', descripcion: 'Para celebrar su cumpleaños.', presupuesto: 'medio' },
+      { categoria: 'carta', titulo: 'Carta escrita a mano', descripcion: 'Lo más personal.', presupuesto: 'bajo' }
+    ] }))
+  ]);
+  const regalos = await ia.sugerirRegalos({ actor: 'prueba', fecha: '2026-10-24', etiquetaTipo: 'Cena romántica', ocasion: 'Cumpleaños', modeloDePrueba: modelo });
+  assert.equal(regalos.length, 3);
+  const visto = JSON.stringify(vistos);
+  assert.ok(visto.includes('Bizcocho dominicano') || visto.includes('bizcocho dominicano'), 'el agente leyó la skill de regalos');
+  assert.ok(visto.includes('Varía las categorías') && visto.includes('dos presupuestos'), 'el agente recibió los errores de variedad');
+  console.log('OK 5: agente de regalos lee su skill y corrige poca variedad');
+}
 console.log('TODAS LAS PRUEBAS DEL AGENTE PASARON');
