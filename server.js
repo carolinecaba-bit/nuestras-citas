@@ -472,7 +472,10 @@ app.get('/api/relaciones', (_req, res) => {
 
 function validarPersona(body) {
   const errores = [];
-  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes } = body || {};
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes, sexo } = body || {};
+  if (sexo !== undefined && sexo !== null && !SEXOS_PERMITIDOS.includes(sexo)) {
+    errores.push('El sexo no es válido.');
+  }
 
   if (!nombre || typeof nombre !== 'string' || nombre.trim().length < 2) {
     errores.push('El nombre debe tener al menos 2 caracteres.');
@@ -510,6 +513,8 @@ function validarPersona(body) {
 }
 
 const MAX_FECHAS_IMPORTANTES = 10;
+// Opcional: ayuda a ajustar ideas de regalos y planes (junto con la edad).
+const SEXOS_PERMITIDOS = ['femenino', 'masculino', 'otro'];
 
 function esFechaISOValida(fecha) {
   if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
@@ -544,7 +549,7 @@ app.post('/api/personas', auth.requiereSesion, async (req, res) => {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
   }
 
-  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes } = req.body;
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes, sexo } = req.body;
 
   try {
     const nuevaPersona = await personas.crearPersona({
@@ -553,6 +558,7 @@ app.post('/api/personas', auth.requiereSesion, async (req, res) => {
       relacion: relacion.trim(),
       cumpleanos: cumpleanos || null,
       comidaFavorita: comidaFavorita ? comidaFavorita.trim() : null,
+      sexo: sexo || null,
       correo: correo ? correo.trim() : null,
       notas: notas ? notas.trim() : null,
       fechasImportantes: limpiarFechasImportantes(fechasImportantes)
@@ -572,7 +578,7 @@ app.put('/api/personas/:id', auth.requiereSesion, async (req, res) => {
     return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
   }
 
-  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes } = req.body;
+  const { nombre, relacion, cumpleanos, comidaFavorita, correo, notas, fechasImportantes, sexo } = req.body;
 
   try {
     const actualizada = await personas.actualizarPersona(req.params.id, req.session.usuarioId, {
@@ -580,6 +586,7 @@ app.put('/api/personas/:id', auth.requiereSesion, async (req, res) => {
       relacion: relacion.trim(),
       cumpleanos: cumpleanos || null,
       comidaFavorita: comidaFavorita ? comidaFavorita.trim() : null,
+      sexo: sexo || null,
       correo: correo ? correo.trim() : null,
       notas: notas ? notas.trim() : null,
       fechasImportantes: limpiarFechasImportantes(fechasImportantes)
@@ -706,33 +713,32 @@ app.get('/api/citas', auth.requiereSesion, async (req, res) => {
 // ---------------------------------------------------------------------------
 // POST /api/citas  — crear una cita para el usuario de la sesion actual
 // ---------------------------------------------------------------------------
-app.post('/api/citas', auth.requiereSesion, async (req, res) => {
+/**
+ * Valida y prepara los datos de una cita (para crearla o editarla).
+ * Devuelve { status, cuerpo } si hay un error, o { datos } si todo esta bien.
+ */
+async function prepararDatosCita(req) {
   const errores = validarCita(req.body);
   if (errores.length > 0) {
-    return res.status(400).json({ error: 'datos_invalidos', mensaje: errores.join(' ') });
+    return { status: 400, cuerpo: { error: 'datos_invalidos', mensaje: errores.join(' ') } };
   }
-
   const { titulo, tipo, personaId, fecha, hora, ubicacion, lugarSugerido, detalle } = req.body;
 
-  try {
-    // Si se indico un personaId, confirmamos que sea un perfil del
-    // usuario actual (nunca de otra persona) y lo usamos para generar
-    // un titulo por defecto si no se escribio uno.
-    let persona = null;
-    if (personaId) {
-      persona = await personas.obtenerPersonaPorId(personaId, req.session.usuarioId);
-      if (!persona) {
-        return res.status(400).json({ error: 'datos_invalidos', mensaje: 'El perfil seleccionado no existe.' });
-      }
+  // Si se indico un personaId, confirmamos que sea un perfil del usuario
+  // actual (nunca de otra persona) y lo usamos para generar un titulo por
+  // defecto si no se escribio uno.
+  let persona = null;
+  if (personaId) {
+    persona = await personas.obtenerPersonaPorId(personaId, req.session.usuarioId);
+    if (!persona) {
+      return { status: 400, cuerpo: { error: 'datos_invalidos', mensaje: 'El perfil seleccionado no existe.' } };
     }
+  }
 
-    const tituloFinal = titulo && titulo.trim()
-      ? titulo.trim()
-      : generarTituloPorDefecto(tipo, persona);
-
-    const nuevaCita = await db.crearCita({
+  return {
+    datos: {
       usuarioId: req.session.usuarioId,
-      titulo: tituloFinal,
+      titulo: titulo && titulo.trim() ? titulo.trim() : generarTituloPorDefecto(tipo, persona),
       tipo,
       personaId: persona ? persona.id : null,
       fecha,
@@ -753,16 +759,45 @@ app.post('/api/citas', auth.requiereSesion, async (req, res) => {
           }
         : null,
       detalle: detalle && detalle.trim() ? detalle.trim() : null
-    });
-    // El lugar usado se guarda solo en "Recientes". Es un extra: si
-    // falla, la cita ya quedo guardada y no se interrumpe nada.
-    lugaresGuardados.registrarUso(req.session.usuarioId, nuevaCita.ubicacion).catch((errLugar) => {
-      logger.warning({ actor: actorDePeticion(req), funcion: 'registrarLugarReciente', output: { error: errLugar.message }, mensaje: 'No se pudo guardar el lugar reciente' });
-    });
+    }
+  };
+}
 
+// El lugar usado se guarda solo en "Recientes". Es un extra: si falla, la
+// cita ya quedo guardada y no se interrumpe nada.
+function registrarLugarReciente(req, ubicacion) {
+  lugaresGuardados.registrarUso(req.session.usuarioId, ubicacion).catch((errLugar) => {
+    logger.warning({ actor: actorDePeticion(req), funcion: 'registrarLugarReciente', output: { error: errLugar.message }, mensaje: 'No se pudo guardar el lugar reciente' });
+  });
+}
+
+app.post('/api/citas', auth.requiereSesion, async (req, res) => {
+  try {
+    const preparado = await prepararDatosCita(req);
+    if (!preparado.datos) return res.status(preparado.status).json(preparado.cuerpo);
+    const nuevaCita = await db.crearCita(preparado.datos);
+    registrarLugarReciente(req, nuevaCita.ubicacion);
     res.status(201).json({ cita: nuevaCita });
   } catch (err) {
     manejarError(err, res, 'creacion de cita', req);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/citas/:id  — editar una cita (solo si es del usuario de la sesion)
+// ---------------------------------------------------------------------------
+app.put('/api/citas/:id', auth.requiereSesion, async (req, res) => {
+  try {
+    const preparado = await prepararDatosCita(req);
+    if (!preparado.datos) return res.status(preparado.status).json(preparado.cuerpo);
+    const cita = await db.actualizarCita(req.params.id, req.session.usuarioId, preparado.datos);
+    if (!cita) {
+      return res.status(404).json({ error: 'no_encontrada', mensaje: 'No existe esa cita.' });
+    }
+    registrarLugarReciente(req, cita.ubicacion);
+    res.json({ cita });
+  } catch (err) {
+    manejarError(err, res, 'edicion de cita', req);
   }
 });
 

@@ -46,9 +46,22 @@ async function crearCita(datos) {
   return aCita(rows[0]);
 }
 
+/** Reemplaza los datos de una cita del usuario. Devuelve null si no es suya o no existe. */
+async function actualizarCita(id, usuarioId, datos) {
+  const { rows } = await consulta(
+    `UPDATE citas SET titulo = $3, tipo = $4, persona_id = $5, fecha = $6, hora = $7,
+       ubicacion = $8, lugar_sugerido = $9, detalle = $10
+     WHERE id = $1 AND usuario_id = $2 RETURNING *`,
+    [id, usuarioId, datos.titulo, datos.tipo, datos.personaId, datos.fecha, datos.hora,
+      JSON.stringify(datos.ubicacion), datos.lugarSugerido ? JSON.stringify(datos.lugarSugerido) : null,
+      datos.detalle || null]
+  );
+  return rows[0] ? aCita(rows[0]) : null;
+}
+
 async function eliminarCita(id, usuarioId) {
   const { rowCount } = await consulta('DELETE FROM citas WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
   return rowCount > 0;
 }
 
-module.exports = { obtenerCitas, obtenerCitaPorId, crearCita, eliminarCita };
+module.exports = { obtenerCitas, obtenerCitaPorId, crearCita, actualizarCita, eliminarCita };

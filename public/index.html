@@ -345,7 +345,14 @@
         <div id="opciones-relacion" class="chips"></div>
         <input type="text" id="persona-relacion-otra" class="oculto" placeholder="Escribe la relación" aria-label="Otra relación" />
 
-        <p class="campo-etiqueta">Cumpleaños <span class="texto-suave">(opcional)</span></p>
+        <p class="campo-etiqueta">Sexo <span class="texto-suave">(opcional, ayuda a ajustar ideas de regalos)</span></p>
+        <div id="opciones-sexo" class="chips" role="radiogroup" aria-label="Sexo">
+          <button type="button" class="chip" role="radio" data-sexo="femenino" aria-checked="false">Femenino</button>
+          <button type="button" class="chip" role="radio" data-sexo="masculino" aria-checked="false">Masculino</button>
+          <button type="button" class="chip" role="radio" data-sexo="otro" aria-checked="false">Prefiero no indicar</button>
+        </div>
+
+        <p class="campo-etiqueta">Cumpleaños <span class="texto-suave">(opcional; con el año, calculamos su edad)</span></p>
         <div id="persona-cumpleanos" class="selector-dia-mes"></div>
 
         <p class="campo-etiqueta">Fechas importantes <span class="texto-suave">(aniversarios, el día que se conocieron…)</span></p>

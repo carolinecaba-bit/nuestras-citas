@@ -531,6 +531,10 @@ hasta 5 ideas para esa categoría (título, resumen corto, fuente y
 enlace). Usa el caché en disco si tiene menos de `TOPS_CACHE_HORAS`; si
 no, busca en vivo con SerpApi y actualiza el caché.
 
+### `PUT /api/citas/:id`
+Requiere sesión. Edita una cita propia, con los mismos campos y validaciones
+que al crearla. `404` si la cita no existe o es de otra cuenta.
+
 ### Lugares guardados
 
 - **`GET /api/lugares-guardados`** — favoritos primero, luego los 5 recientes.

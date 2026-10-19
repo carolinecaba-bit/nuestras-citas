@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS personas (
   creado_en           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS personas_usuario_idx ON personas (usuario_id);
+-- Agregado despues: sexo (opcional) de la persona, para ajustar regalos y planes.
+ALTER TABLE personas ADD COLUMN IF NOT EXISTS sexo TEXT;
 
 -- persona_id no es clave foranea a proposito: si se elimina una persona,
 -- sus citas se conservan y la app muestra "perfil eliminado".

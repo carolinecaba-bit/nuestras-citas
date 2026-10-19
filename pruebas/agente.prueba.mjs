@@ -126,4 +126,20 @@ const base = { actor: 'prueba', fecha: '2026-10-24', ubicacion: { nombre: 'Santo
   assert.ok(visto.includes('Varía las categorías') && visto.includes('dos presupuestos'), 'el agente recibió los errores de variedad');
   console.log('OK 5: agente de regalos lee su skill y corrige poca variedad');
 }
+// --- Prueba 6: el agente de regalos recibe la edad y el sexo de la persona ---
+{
+  const { modelo, vistos } = crearModelo([
+    paso(llamada('1', 'entregarRegalos', { ideas: [
+      { categoria: 'experiencia', titulo: 'Clase de cocina juntos', descripcion: 'Le encanta cocinar.', presupuesto: 'alto' },
+      { categoria: 'comida', titulo: 'Su plato favorito', descripcion: 'Hecho en casa.', presupuesto: 'bajo' },
+      { categoria: 'objeto', titulo: 'Foto familiar enmarcada', descripcion: 'Un recuerdo para su escritorio.', presupuesto: 'medio' }
+    ] }))
+  ]);
+  const papa = { nombre: 'Rafael', relacion: 'Padre', cumpleanos: '1965-05-10', sexo: 'masculino', notas: 'Le encanta cocinar' };
+  await ia.sugerirRegalos({ actor: 'prueba', fecha: '2026-10-24', etiquetaTipo: 'Almuerzo', persona: papa, modeloDePrueba: modelo });
+  const visto = JSON.stringify(vistos);
+  assert.ok(visto.includes('edad: 61 años') && visto.includes('sexo: masculino'), 'el prompt incluye edad y sexo');
+  assert.ok(visto.includes('nunca para caer en estereotipos'), 'el prompt advierte sobre estereotipos');
+  console.log('OK 6: el agente de regalos recibe edad y sexo, con la regla contra estereotipos');
+}
 console.log('TODAS LAS PRUEBAS DEL AGENTE PASARON');

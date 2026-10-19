@@ -114,6 +114,19 @@ function siguienteOcurrencia(iso) {
   return null;
 }
 
+const ETIQUETAS_SEXO = { femenino: 'Femenino', masculino: 'Masculino', otro: 'Prefiere no indicarlo' };
+
+/** Edad actual segun el cumpleaños, o null si no se conoce el año. */
+function edadActual(cumpleanos) {
+  if (!cumpleanos) return null;
+  const [anio, mes, dia] = cumpleanos.split('-').map(Number);
+  if (anio === ANIO_DESCONOCIDO) return null;
+  const h = hoy();
+  let edad = h.getFullYear() - anio;
+  if (h.getMonth() + 1 < mes || (h.getMonth() + 1 === mes && h.getDate() < dia)) edad -= 1;
+  return edad >= 0 && edad < 120 ? edad : null;
+}
+
 function formatearHora12h(horas, minutos) {
   const periodo = horas < 12 ? 'a.m.' : 'p.m.';
   let horas12 = horas % 12;
@@ -678,7 +691,10 @@ function crearTarjetaCita(cita) {
         <span class="icono-tipo">${ICONOS_TIPO[cita.tipo] || ICONOS_TIPO.otro}</span>
         <h3>${escaparHtml(cita.titulo)}</h3>
       </div>
-      <button type="button" class="btn-eliminar">Eliminar</button>
+      <div class="cita-botones">
+        <button type="button" class="btn-eliminar btn-editar">Editar</button>
+        <button type="button" class="btn-eliminar">Eliminar</button>
+      </div>
     </div>
     <div class="cita-meta">${formatearFechaHora(cita)}${conQuienTexto}</div>
     ${esSuCumpleanos ? `<div class="cita-cumpleanos">🎂 ¡Es el cumpleaños de ${escaparHtml(persona.nombre)}!</div>` : ''}
@@ -708,7 +724,9 @@ function crearTarjetaCita(cita) {
     }
   });
 
-  const botonEliminar = card.querySelector('.btn-eliminar');
+  card.querySelector('.btn-editar').addEventListener('click', () => editarCita(cita));
+
+  const botonEliminar = card.querySelector('.btn-eliminar:not(.btn-editar)');
   botonEliminar.addEventListener('click', () => {
     if (botonEliminar.dataset.confirmar) {
       eliminarCita(cita.id);
@@ -837,8 +855,11 @@ function verPersona(id) {
   const persona = buscarPersonaPorId(id);
   if (!persona) return;
   const suyas = ordenarCitas(citas.filter((c) => c.personaId === id)).reverse();
+  const edad = edadActual(persona.cumpleanos);
   const datos = [
     persona.cumpleanos ? ['Cumpleaños', formatearDiaMes(persona.cumpleanos)] : null,
+    edad !== null ? ['Edad', `${edad} años`] : null,
+    persona.sexo ? ['Sexo', ETIQUETAS_SEXO[persona.sexo] || ''] : null,
     persona.comidaFavorita ? ['Comida favorita', escaparHtml(persona.comidaFavorita)] : null,
     persona.correo ? ['Correo', escaparHtml(persona.correo)] : null
   ].filter(Boolean);
@@ -954,6 +975,26 @@ $('opciones-relacion').addEventListener('click', (evento) => {
   if (esOtra) $('persona-relacion-otra').focus();
 });
 
+function marcarSexo(sexo) {
+  $('opciones-sexo').querySelectorAll('[data-sexo]').forEach((chip) => {
+    const activo = chip.dataset.sexo === sexo;
+    chip.classList.toggle('activo', activo);
+    chip.setAttribute('aria-checked', String(activo));
+  });
+}
+
+$('opciones-sexo').addEventListener('click', (evento) => {
+  const chip = evento.target.closest('[data-sexo]');
+  if (!chip) return;
+  // Tocar de nuevo el elegido lo desmarca (el campo es opcional).
+  marcarSexo(chip.classList.contains('activo') ? null : chip.dataset.sexo);
+});
+
+function sexoElegido() {
+  const chip = $('opciones-sexo').querySelector('.chip.activo');
+  return chip ? chip.dataset.sexo : null;
+}
+
 function relacionElegida() {
   const chip = $('opciones-relacion').querySelector('.chip.activo');
   if (!chip) return '';
@@ -1008,6 +1049,7 @@ function abrirFormPersona(persona = null, opciones = {}) {
 
   $('persona-nombre').value = persona ? persona.nombre : '';
   renderizarOpcionesRelacion(persona ? persona.relacion : null);
+  marcarSexo(persona ? persona.sexo : null);
   $('persona-cumpleanos').innerHTML = htmlSelectorDiaMes('cumple', persona ? persona.cumpleanos : null);
   fechasEnFormulario = persona ? (persona.fechasImportantes || []).map((f) => ({ ...f })) : [];
   renderizarFechasFormulario();
@@ -1059,7 +1101,8 @@ $('form-persona').addEventListener('submit', async (evento) => {
     comidaFavorita: $('persona-comida').value.trim() || null,
     correo,
     notas: $('persona-notas').value.trim() || null,
-    fechasImportantes
+    fechasImportantes,
+    sexo: sexoElegido()
   };
 
   const boton = $('btn-guardar-persona');
@@ -1132,9 +1175,11 @@ function borradorVacio() {
  * ubicacion, lugarElegido y titulo (por ejemplo, desde una idea de "Hoy").
  * `pasoInicial` permite saltar los pasos que ya estan resueltos.
  */
-function abrirAsistente(prefill = {}, pasoInicial = 1) {
-  const { titulo = '', ...resto } = prefill;
+function abrirAsistente(prefill = {}, pasoInicial = 1, { editandoId = null } = {}) {
+  const { titulo = '', detalle = '', ...resto } = prefill;
   borrador = { ...borradorVacio(), ...resto };
+  citaEnEdicion = editandoId;
+  volverAlResumen = false;
   if (borrador.personaId && !buscarPersonaPorId(borrador.personaId)) borrador.personaId = null;
   pasoActual = 1;
   const base = borrador.fecha ? deISO(borrador.fecha) : hoy();
@@ -1144,7 +1189,7 @@ function abrirAsistente(prefill = {}, pasoInicial = 1) {
   claveIdeasAsistente = null;
   $('cita-titulo').value = titulo;
   reiniciarMapaDetalles();
-  $('cita-detalle').value = '';
+  $('cita-detalle').value = detalle || '';
   $('lista-regalos').innerHTML = '';
   ['regalos-mensaje', 'tiendas-mensaje'].forEach((id) => ocultarMensaje($(id)));
   $('ideas-asistente-lista').innerHTML = '';
@@ -1161,6 +1206,23 @@ function abrirAsistente(prefill = {}, pasoInicial = 1) {
   irAPaso(pasoInicial);
 }
 
+// Si se esta editando una cita, su id; si es una cita nueva, null.
+let citaEnEdicion = null;
+
+/** Abre el asistente con los datos de una cita existente, en el ultimo paso. */
+function editarCita(cita) {
+  abrirAsistente({
+    tipo: cita.tipo,
+    fecha: cita.fecha,
+    hora: cita.hora,
+    personaId: cita.personaId,
+    ubicacion: { ...cita.ubicacion },
+    lugarElegido: cita.lugarSugerido || null,
+    titulo: cita.titulo,
+    detalle: cita.detalle || ''
+  }, PASOS.length, { editandoId: cita.id });
+}
+
 let elementoConFocoPrevioAsistente = null;
 function cerrarAsistente() {
   $('asistente').classList.add('oculto');
@@ -1171,11 +1233,14 @@ function cerrarAsistente() {
 function irAPaso(numero) {
   pasoActual = numero;
   document.querySelectorAll('.paso').forEach((p) => p.classList.toggle('activo', Number(p.dataset.paso) === numero));
-  $('asistente-progreso-texto').textContent = `Paso ${numero} de ${PASOS.length}`;
+  $('asistente-progreso-texto').textContent = citaEnEdicion ? `Editando la cita: paso ${numero} de ${PASOS.length}` : `Paso ${numero} de ${PASOS.length}`;
   $('asistente-titulo').textContent = PASOS[numero - 1].nombre;
   $('asistente-barra').style.width = `${(numero / PASOS.length) * 100}%`;
   $('btn-atras').classList.toggle('invisible', numero === 1);
-  $('btn-siguiente').textContent = numero === PASOS.length ? 'Guardar cita' : 'Siguiente';
+  if (numero === PASOS.length) volverAlResumen = false;
+  $('btn-siguiente').textContent = numero === PASOS.length
+    ? (citaEnEdicion ? 'Guardar cambios' : 'Guardar cita')
+    : (volverAlResumen ? 'Volver al resumen' : 'Siguiente');
   $('btn-siguiente').disabled = false;
   $('btn-siguiente').classList.replace('btn-secundario', 'btn-principal');
 
@@ -1195,10 +1260,22 @@ function actualizarPie() {
   $('asistente-pista').textContent = valido ? '' : paso.pista;
 }
 
+$('resumen-cita').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-ir-paso]');
+  if (!boton) return;
+  volverAlResumen = true;
+  irAPaso(Number(boton.dataset.irPaso));
+});
+
+// Al tocar "Cambiar" en el resumen, el boton Siguiente regresa directo al
+// ultimo paso en vez de recorrer todos los pasos intermedios.
+let volverAlResumen = false;
+
 $('btn-atras').addEventListener('click', () => { if (typeof pasoActual === 'number' && pasoActual > 1) irAPaso(pasoActual - 1); });
 $('btn-siguiente').addEventListener('click', () => {
   if (pasoActual === 'listo') { cerrarAsistente(); return; }
   if (!PASOS[pasoActual - 1].valido()) return;
+  if (volverAlResumen && pasoActual < PASOS.length) { irAPaso(PASOS.length); return; }
   if (pasoActual < PASOS.length) irAPaso(pasoActual + 1);
   else guardarCita();
 });
@@ -1578,13 +1655,15 @@ $('btn-usar-coordenadas').addEventListener('click', () => {
 function renderizarPasoDetalles() {
   const persona = borrador.personaId ? buscarPersonaPorId(borrador.personaId) : null;
   const hora = borrador.hora ? (() => { const [h, m] = borrador.hora.split(':').map(Number); return formatearHora12h(h, m); })() : null;
+  const cambiar = (paso, texto) => `<button type="button" class="enlace enlace-cambiar" data-ir-paso="${paso}" aria-label="Cambiar ${texto}">Cambiar</button>`;
   $('resumen-cita').innerHTML = `
     <span class="icono-tipo">${ICONOS_TIPO[borrador.tipo] || ICONOS_TIPO.otro}</span>
-    <p>
-      <strong>${escaparHtml(etiquetaTipo(borrador.tipo))}</strong>${persona ? ` con ${escaparHtml(persona.nombre)}` : ''}<br>
-      ${capitalizar(formatearFechaLarga(borrador.fecha))}${hora ? `, ${hora}` : ''}<br>
-      ${escaparHtml(borrador.ubicacion.nombre)}
-    </p>`;
+    <div class="resumen-filas">
+      <p><strong>${escaparHtml(etiquetaTipo(borrador.tipo))}</strong> ${cambiar(4, 'el tipo de plan')}</p>
+      <p>${persona ? `Con ${escaparHtml(persona.nombre)}` : 'Sin persona elegida'} ${cambiar(3, 'con quién')}</p>
+      <p>${capitalizar(formatearFechaLarga(borrador.fecha))}${hora ? `, ${hora}` : ''} ${cambiar(1, 'la fecha y la hora')}</p>
+      <p>${escaparHtml(borrador.ubicacion.nombre)} ${cambiar(2, 'el lugar')}</p>
+    </div>`;
   renderizarSeccionLugares();
   renderizarSeccionDetalle();
 }
@@ -1982,7 +2061,8 @@ async function guardarCita() {
   boton.disabled = true;
   boton.textContent = 'Guardando...';
   try {
-    const { cita } = await enviarJson('/api/citas', 'POST', {
+    const editando = citaEnEdicion;
+    const { cita } = await enviarJson(editando ? `/api/citas/${editando}` : '/api/citas', editando ? 'PUT' : 'POST', {
       titulo: $('cita-titulo').value.trim() || null,
       tipo: borrador.tipo,
       personaId: borrador.personaId,
@@ -1992,23 +2072,23 @@ async function guardarCita() {
       lugarSugerido: borrador.lugarElegido,
       detalle: $('seccion-detalle').classList.contains('oculto') ? null : ($('cita-detalle').value.trim() || null)
     });
-    mostrarConfirmacion(cita);
+    mostrarConfirmacion(cita, Boolean(editando));
     await Promise.all([cargarCitas(), cargarLugaresGuardados()]);
     renderizarTodo();
   } catch (err) {
     mostrarMensaje(mensaje, err.message);
     boton.disabled = false;
-    boton.textContent = 'Guardar cita';
+    boton.textContent = citaEnEdicion ? 'Guardar cambios' : 'Guardar cita';
   }
 }
 
 /** Pantalla final del asistente: la cita quedo guardada; ofrece el calendario. */
-function mostrarConfirmacion(cita) {
+function mostrarConfirmacion(cita, fueEdicion = false) {
   const persona = cita.personaId ? buscarPersonaPorId(cita.personaId) : null;
   const lugar = cita.lugarSugerido || cita.ubicacion;
   document.querySelectorAll('.paso').forEach((p) => p.classList.toggle('activo', p.dataset.paso === 'listo'));
   $('asistente-progreso-texto').textContent = 'Todo listo';
-  $('asistente-titulo').textContent = 'Cita guardada';
+  $('asistente-titulo').textContent = fueEdicion ? 'Cambios guardados' : 'Cita guardada';
   $('asistente-barra').style.width = '100%';
   $('btn-atras').classList.add('invisible');
   $('asistente-pista').textContent = '';
@@ -2017,13 +2097,15 @@ function mostrarConfirmacion(cita) {
   $('btn-siguiente').classList.replace('btn-principal', 'btn-secundario');
   pasoActual = 'listo';
 
+  citaEnEdicion = null;
   $('cita-confirmada').innerHTML = `
     <div class="confirmacion">
       <span class="confirmacion-icono" aria-hidden="true">✓</span>
       <h3>${escaparHtml(cita.titulo)}</h3>
       <p>${capitalizar(formatearFechaHora(cita))}<br>${persona ? `Con ${escaparHtml(persona.nombre)} en ` : 'En '}${escaparHtml(lugar.nombre)}</p>
       <a class="btn btn-principal" href="${generarUrlGoogleCalendar(cita, persona)}" target="_blank" rel="noopener">📅 Agregar a Google Calendar</a>
-      ${persona && persona.correo ? `<p class="texto-suave confirmacion-nota">Google Calendar incluirá a ${escaparHtml(persona.nombre)} como invitada.</p>` : ''}
+      ${persona && persona.correo ? `<p class="texto-suave confirmacion-nota">Google Calendar incluirá a ${escaparHtml(persona.nombre)} ${persona.sexo === 'femenino' ? 'como invitada' : persona.sexo === 'masculino' ? 'como invitado' : 'en la invitación'}.</p>` : ''}
+      ${fueEdicion ? '<p class="texto-suave confirmacion-nota">Si ya la habías agregado a Google Calendar, actualiza o reemplaza ese evento: la app no puede cambiarlo por ti.</p>' : ''}
     </div>`;
   document.querySelector('.asistente-cuerpo').scrollTop = 0;
 }

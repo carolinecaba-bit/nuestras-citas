@@ -24,4 +24,9 @@ Lo que más funciona es lo personal: usa la comida favorita, los gustos y las no
 - **Madre o padre:** cariñoso y práctico: flores, su comida favorita, una foto familiar enmarcada.
 - **Amistades:** divertido y compartido: una experiencia juntos, algo de su hobby.
 
+## Según la edad y el sexo
+- **La edad cambia mucho el regalo:** niños (juguetes, experiencias activas, algo de su personaje favorito), adolescentes (algo de su hobby, tecnología pequeña, experiencias con amigos), adultos jóvenes (experiencias, algo para su casa o su pasión), adultos mayores (comodidad, recuerdos familiares, tiempo juntos).
+- **El sexo solo ajusta, no decide.** Evita regalos "de catálogo" por sexo (flores solo para mujeres, herramientas solo para hombres): si las notas dicen que a él le encantan las flores, sugiere flores.
+- Si la persona prefiere no indicar su sexo, propón ideas que funcionen para cualquiera.
+
 No inventes datos de la persona que no te dieron.

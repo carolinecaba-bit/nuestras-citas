@@ -15,9 +15,9 @@ const RELACIONES_SUGERIDAS = [
   'Hija', 'Hijo', 'Amiga', 'Amigo'
 ];
 
-const CAMPOS = ['nombre', 'relacion', 'cumpleanos', 'comidaFavorita', 'correo', 'notas', 'fechasImportantes'];
+const CAMPOS = ['nombre', 'relacion', 'cumpleanos', 'comidaFavorita', 'correo', 'notas', 'fechasImportantes', 'sexo'];
 const COLUMNAS = {
-  nombre: 'nombre', relacion: 'relacion', cumpleanos: 'cumpleanos', comidaFavorita: 'comida_favorita',
+  nombre: 'nombre', relacion: 'relacion', cumpleanos: 'cumpleanos', comidaFavorita: 'comida_favorita', sexo: 'sexo',
   correo: 'correo', notas: 'notas', fechasImportantes: 'fechas_importantes'
 };
 
@@ -29,6 +29,7 @@ function aPersona(fila) {
     relacion: fila.relacion,
     cumpleanos: fila.cumpleanos,
     comidaFavorita: fila.comida_favorita,
+    sexo: fila.sexo || null,
     correo: fila.correo,
     notas: fila.notas,
     fechasImportantes: fila.fechas_importantes || [],

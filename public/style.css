@@ -875,6 +875,13 @@ textarea { resize: vertical; }
   margin-bottom: 4px;
 }
 .resumen-cita p { margin: 0; font-size: 14px; color: var(--texto-suave); }
+.resumen-filas { display: grid; gap: 2px; flex: 1; }
+.resumen-filas p { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.resumen-filas p::first-line { color: inherit; }
+.resumen-filas p:first-child, .resumen-filas p:first-child strong { color: var(--texto); }
+.enlace-cambiar { font-size: 13px; padding: 0; flex: none; }
+.cita-botones { display: flex; gap: 6px; flex: none; }
+.btn-editar:hover { color: var(--acento); border-color: var(--acento); }
 .resumen-cita p::first-line { color: var(--texto); }
 .resumen-cita strong { color: var(--texto); }
 
